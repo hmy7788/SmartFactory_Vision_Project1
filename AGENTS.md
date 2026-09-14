@@ -1,17 +1,17 @@
 ## Claude Code 프롬프트
 ```
-「텀블러 형태·재질 분류 및 설명 시스템」 프로젝트를 시작하려고 해.
+「텀블러 형태 분류 및 설명 시스템」 프로젝트를 시작하려고 해.
 아래 설계를 기반으로 프로젝트 스캐폴딩(디렉토리, 코드 스켈레톤, 환경설정)을 먼저 구축해줘.
 실제 데이터(크롤링·촬영)는 아직 없으니, 데이터 없이도 진행 가능한 부분부터 진행해줘.
 
 ## 프로젝트 배경
 최종 목표는 "건축 양식 판별"이지만, 건축물 데이터 직접 수집이 어려워 동형 구조의 대리 도메인인
 "텀블러 형태 판별"로 치환해 파이프라인을 먼저 구현·검증한다. 검증 대상은 모델이 아니라 시스템이다.
+재질 분류는 이번 스코프에서 제외하고 형태 분류(4종)에만 집중한다.
 
 ## 분류 체계
 - 형태(4종): 직선 원통형(straight) / 연속 테이퍼형(taper_smooth) / 단차 테이퍼형(taper_step) / 머그형(mug)
-- 재질(2종): 플라스틱 / 스테인리스
-- 판정 규칙(형태):
+- 판정 규칙:
   1) 높이가 지름의 1.5배 이하면 머그형 (손잡이 유무는 무시)
   2) 아래 지름이 위 지름의 95% 이상, 윤곽 거의 수직이면 직선 원통형
   3) 꺾임점 없이 매끄럽게 좁아지면 연속 테이퍼형
@@ -46,19 +46,19 @@ naver-shopping API 호출용 requests, Pillow
 
 ## 5. src/models/ 스켈레톤
 - dl2_resnet/train.py: torchvision의 사전학습 ResNet-18/50을 불러와 마지막 FC layer만
-  우선 fine-tuning하는 학습 스크립트 (백본 freeze 옵션 포함)
-- efficientnet/train.py: timm 라이브러리로 EfficientNet-B0 fine-tuning 스크립트
+  우선 fine-tuning하는 형태 분류 학습 스크립트 (백본 freeze 옵션 포함)
+- efficientnet/train.py: timm 라이브러리로 EfficientNet-B0 fine-tuning 스크립트 (형태 분류)
 - dl1_maskrcnn/: torchvision의 Mask R-CNN(ResNet50+FPN)을 로드하고, 예측된 Mask를
   이진화해서 src/rule_based/shape_classifier.py의 width profile 함수를 재사용하도록 연결하는 구조
-  (형태: Mask 기반 기하 분석, 재질: 별도 ResNet50 Material Classification head)
+  (형태만 판별, 재질 헤드는 만들지 않음)
 
 ## 6. src/pipeline.py 구현
-이미지 업로드 → 전처리(Resize, Normalize) → 모델 추론 → Confidence 포함 결과 반환 →
-형태·재질별 설명 텍스트(src/explanation/에서 로드) 반환하는 통합 함수 인터페이스 정의
+이미지 업로드 → 전처리(Resize, Normalize) → 모델 추론 → Confidence 포함 형태 분류 결과 반환 →
+형태별 설명 텍스트(src/explanation/에서 로드) 반환하는 통합 함수 인터페이스 정의
 (내부 모델은 아직 학습 전이므로 더미 응답으로 동작 검증)
 
 ## 7. app/gradio_app.py
-이미지 업로드 → pipeline.py 호출 → 형태/재질/Confidence/설명을 보여주는 간단한 Gradio UI
+이미지 업로드 → pipeline.py 호출 → 형태/Confidence/설명을 보여주는 간단한 Gradio UI
 
 ## 8. README.md
 이미 작성된 프로젝트 개요·분류 체계·데이터 구성·촬영 프로토콜·일정을 그대로 유지하고,
