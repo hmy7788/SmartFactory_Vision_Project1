@@ -29,4 +29,35 @@
 
 ## 로그
 
-_(아직 기록된 트러블슈팅 사례 없음 — 위 형식으로 이 아래에 추가)_
+## [2026-09-14] cv2.convexityDefects 반환 shape이 환경마다 다름
+
+- **트랙/영역**: rule_based / shape_classifier.py::detect_handle
+- **증상**: `defects[:, 0]` 로 순회 후 `defect[3]` 인덱싱 시 `IndexError: invalid index to scalar variable`
+- **원인**: 이 프로젝트 conda 환경(`vision_programming`, opencv-python 5.0.0.93)에서 `cv2.convexityDefects()`가 `(N, 4)` shape을 반환함. 흔히 알려진 `(N, 1, 4)` shape을 가정하고 `defects[:, 0]`로 중간 차원을 벗겨내면 스칼라가 나와 깨짐.
+- **해결**: `defects.reshape(-1, 4)`로 순회하도록 변경 — 두 shape 모두에서 안전하게 동작.
+- **관련 파일**: `src/rule_based/shape_classifier.py`
+
+## [2026-09-14] 손잡이 돌출부가 taper_smooth를 taper_step으로 오분류시킴
+
+- **트랙/영역**: rule_based / shape_classifier.py::classify_shape
+- **증상**: `make_taper_smooth_mask(with_handle=True)`가 `taper_smooth`가 아니라 `taper_step`으로 분류됨 (README가 명시적으로 경고한 "손잡이 때문에 오분류" 케이스의 변형).
+- **원인**: 손잡이가 폭 프로파일의 한두 구간(bin)에서만 폭을 급격히 튀어오르게 만들어, "단일 구간 급감(step)" 판정 로직이 그 스파이크 이후의 복귀를 진짜 단차로 오인함.
+- **해결**: 폭 프로파일에 1D median filter(window=5)를 적용해 한두 구간짜리 스파이크를 억제한 뒤 판정하도록 변경 (`_median_smooth`). 손잡이 유무로 분기하는 게 아니라 측정 자체를 견고하게 만드는 방식이라 "실루엣이 손잡이보다 우선" 원칙과 충돌하지 않음.
+- **관련 파일**: `src/rule_based/shape_classifier.py`
+- **주의**: window=5는 지금의 합성 마스크(높이 300px, 손잡이 높이 50px, 10구간)에 맞춘 값. 실사진 확보 후 손잡이 크기 분포를 보고 재조정 필요 (TUNE_ME).
+
+## [2026-09-14] cv2.imread/imwrite가 한글 경로에서 조용히 실패
+
+- **트랙/영역**: rule_based / classify_image.py (실제 이미지 파일 입력)
+- **증상**: `cv2.imwrite(korean_path, img)`가 예외 없이 `False`를 반환하며 파일이 저장되지 않음. `cv2.imread`도 마찬가지로 `None`을 조용히 반환할 수 있음.
+- **원인**: OpenCV의 Windows 빌드가 non-ASCII(한글 등) 경로를 제대로 처리하지 못함. **이 저장소 경로 자체가 `C:\Users\한국전파진흥협회\...`라서 팀원 전원이 실사진으로 테스트할 때 반드시 걸리는 문제.**
+- **해결**: `classify_image.py`에 `imread_unicode`(`np.fromfile` + `cv2.imdecode`) / `imwrite_unicode`(`cv2.imencode` + `ndarray.tofile`) 헬퍼를 추가해 우회. **다른 트랙(dl-trainer 등)에서 cv2로 이미지 파일을 직접 읽고 쓰는 코드를 새로 짤 때도 같은 패턴을 써야 함** — `cv2.imread`/`cv2.imwrite`를 경로 문자열로 직접 호출하지 말 것.
+- **관련 파일**: `src/rule_based/classify_image.py`
+
+## [2026-09-14] detect_handle이 taper_step의 꺾임 지점도 손잡이로 오검출
+
+- **트랙/영역**: rule_based / shape_classifier.py::detect_handle
+- **증상**: `make_taper_step_mask()`(손잡이 없음)를 `detect_handle()`에 넣으면 `True`가 나옴.
+- **원인**: convexityDefects는 "오목한 지점의 깊이"만 보므로, 단차 테이퍼형의 꺾임 지점(급격한 폭 감소로 생기는 오목 코너)과 실제 손잡이를 기하학적으로 구분하지 못함.
+- **해결**: 미해결 — `classify_shape()`의 분류 결과 자체에는 영향 없음(handle_detected를 판정에 쓰지 않으므로)을 확인하고 일단 진행. 다만 이 값을 나중에 설명 텍스트("손잡이가 있는 텀블러입니다" 등)에 그대로 쓰면 taper_step에 대해 잘못된 설명이 나갈 수 있음 — pipeline-integrator가 explanation 연결할 때 주의.
+- **관련 파일**: `src/rule_based/shape_classifier.py`

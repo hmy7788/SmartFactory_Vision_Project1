@@ -14,7 +14,7 @@
 
 | 날짜 | 담당자 | 변경 사항 | Val 정확도 | Test 정확도 | 비고 |
 |---|---|---|---|---|---|
-| _(아직 실험 없음)_ | | | | | |
+| 2026-09-14 | Claude | 최초 구현: get_mask/compute_width_profile/detect_handle/classify_shape + 합성 마스크 10종 pytest | N/A (실데이터 없음) | N/A | 합성 마스크 4종(+손잡이 변형) 전부 올바른 라벨로 분류(10/10 테스트 통과). 실사진 확보 전까지는 정확도 숫자 의미 없음 — get_mask의 세그멘테이션 견고성이 다음 병목 |
 
 ## Mask R-CNN (`src/models/dl1_maskrcnn/`)
 
