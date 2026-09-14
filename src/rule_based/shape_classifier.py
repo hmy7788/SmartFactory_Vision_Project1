@@ -18,6 +18,8 @@ import numpy as np
 # 임계값 — 실측 데이터 확보 후 재조정 필요 (TUNE_ME)
 MUG_HEIGHT_TO_DIAMETER_MAX = 1.5
 STRAIGHT_BOTTOM_TOP_RATIO_MIN = 0.95
+STEP_JUMP_RATIO_THRESHOLD = 0.4
+HANDLE_DEPTH_RATIO_THRESHOLD = 0.08
 
 SHAPE_LABELS_KO = {
     "mug": "머그형",
@@ -27,29 +29,11 @@ SHAPE_LABELS_KO = {
 }
 
 
-def describe_result_ko(result: dict) -> str:
-    """classify_shape()의 반환값을 사람이 읽기 좋은 한글 설명으로 바꾼다."""
-    shape_ko = SHAPE_LABELS_KO.get(result["shape"], result["shape"])
-    profile_str = ", ".join(f"{w:.1f}" for w in result["width_profile"])
-    handle_ko = "예" if result["handle_detected"] else "아니오"
-    return (
-        f"형태            : {shape_ko} ({result['shape']})\n"
-        f"높이/지름 비율   : {result['height_diameter_ratio']:.2f}\n"
-        f"아래폭/위폭 비율 : {result['bottom_top_ratio']:.2f}\n"
-        f"손잡이 감지      : {handle_ko}\n"
-        f"폭 프로파일(위→아래) : [{profile_str}]"
-    )
-STEP_JUMP_RATIO_THRESHOLD = 0.4
-HANDLE_DEPTH_RATIO_THRESHOLD = 0.08
+def _rough_mask_otsu(image: np.ndarray) -> np.ndarray:
+    """Otsu 임계값 + 최대 외곽 컨투어로 대략적인 전경 마스크를 만든다.
 
-
-def get_mask(image: np.ndarray) -> np.ndarray:
-    """이미지에서 전경(텀블러) 이진 마스크를 추출한다.
-
-    Otsu 임계값 + 최대 외곽 컨투어 기반의 단순한 방법이라, 배경이 단일 색이고
-    대비가 뚜렷할 때만 안정적으로 동작한다. 실제 촬영 프로토콜은 배경을 3종
-    이상 요구하므로, 실사진 검수 단계에서 GrabCut 등 더 견고한 세그멘테이션으로
-    교체·보완이 필요하다 (알려진 한계, 이번 스코프 밖).
+    배경이 단일 색이고 대비가 뚜렷할 때만 안정적으로 동작하는 초기 추정치일
+    뿐이다 — 이 결과는 get_mask()에서 GrabCut의 시드로만 쓰인다.
     """
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -66,6 +50,68 @@ def get_mask(image: np.ndarray) -> np.ndarray:
     largest = max(contours, key=cv2.contourArea)
     cv2.drawContours(mask, [largest], -1, 255, thickness=cv2.FILLED)
     return mask
+
+
+def _grabcut_refine(image: np.ndarray, rough_mask: np.ndarray) -> np.ndarray:
+    """Otsu 결과를 시드로 GrabCut을 돌려 마스크를 정제한다.
+
+    Otsu는 명도(그레이스케일) 하나만 보지만 GrabCut은 색 분포(GMM)를 전경/배경
+    각각 따로 학습하기 때문에, 그림자가 물체에 붙거나 물체·배경 명도가 비슷한
+    경우(나무 바닥, 코르크 받침 등)에 더 안정적이다. 실패하면 원본 rough_mask로
+    조용히 폴백한다.
+    """
+    if image.ndim != 3:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+
+    h, w = rough_mask.shape
+    border = max(2, int(0.03 * min(h, w)))
+    kernel = np.ones((15, 15), np.uint8)
+    sure_fg = cv2.erode(rough_mask, kernel, iterations=1)
+
+    gc_mask = np.full((h, w), cv2.GC_PR_BGD, dtype=np.uint8)
+    gc_mask[rough_mask > 0] = cv2.GC_PR_FGD
+    gc_mask[sure_fg > 0] = cv2.GC_FGD
+    # 이미지 테두리는 배경이 확실하다고 가정(촬영 프로토콜상 피사체가 프레임
+    # 가장자리까지 닿지 않음) — GrabCut이 배경 색 모델을 학습할 시드를 준다.
+    gc_mask[:border, :] = cv2.GC_BGD
+    gc_mask[-border:, :] = cv2.GC_BGD
+    gc_mask[:, :border] = cv2.GC_BGD
+    gc_mask[:, -border:] = cv2.GC_BGD
+
+    bgd_model = np.zeros((1, 65), dtype=np.float64)
+    fgd_model = np.zeros((1, 65), dtype=np.float64)
+    try:
+        cv2.grabCut(image, gc_mask, None, bgd_model, fgd_model, 5, cv2.GC_INIT_WITH_MASK)
+    except cv2.error:
+        return rough_mask
+
+    refined = np.where((gc_mask == cv2.GC_FGD) | (gc_mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
+    if not refined.any():
+        return rough_mask
+    return refined
+
+
+def get_mask(image: np.ndarray, use_grabcut: bool = True) -> np.ndarray:
+    """이미지에서 전경(텀블러) 이진 마스크를 추출한다.
+
+    Otsu로 대략적인 위치를 잡고(_rough_mask_otsu), GrabCut으로 정제한다
+    (_grabcut_refine). 그래도 완벽하지 않다 — 배경과 색이 거의 같은 부분(예:
+    바닥과 겹치는 그림자)은 여전히 실패할 수 있으니, 분류 결과가 이상하면
+    저장된 마스크를 먼저 눈으로 확인할 것.
+    """
+    rough = _rough_mask_otsu(image)
+    if not rough.any():
+        return rough
+
+    mask = _grabcut_refine(image, rough) if use_grabcut else rough
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return mask
+    largest = max(contours, key=cv2.contourArea)
+    cleaned = np.zeros_like(mask)
+    cv2.drawContours(cleaned, [largest], -1, 255, thickness=cv2.FILLED)
+    return cleaned
 
 
 def compute_width_profile(mask: np.ndarray, n_bins: int = 10) -> np.ndarray:
@@ -173,3 +219,17 @@ def classify_shape(mask: np.ndarray, n_bins: int = 10) -> dict:
         "width_profile": profile.tolist(),
         "handle_detected": handle_detected,
     }
+
+
+def describe_result_ko(result: dict) -> str:
+    """classify_shape()의 반환값을 사람이 읽기 좋은 한글 설명으로 바꾼다."""
+    shape_ko = SHAPE_LABELS_KO.get(result["shape"], result["shape"])
+    profile_str = ", ".join(f"{w:.1f}" for w in result["width_profile"])
+    handle_ko = "예" if result["handle_detected"] else "아니오"
+    return (
+        f"형태            : {shape_ko} ({result['shape']})\n"
+        f"높이/지름 비율   : {result['height_diameter_ratio']:.2f}\n"
+        f"아래폭/위폭 비율 : {result['bottom_top_ratio']:.2f}\n"
+        f"손잡이 감지      : {handle_ko}\n"
+        f"폭 프로파일(위→아래) : [{profile_str}]"
+    )
