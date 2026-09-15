@@ -20,19 +20,19 @@
 | 2026-09-15 | Claude | `data/raw2`(수집·미검증 상태)에서 클래스당 무작위 10장(n=40, seed=42) 샘플링 후 `classify_shape()` 일괄 실행 — `notebooks/rule_based_raw2_sample.ipynb` | 폴더 라벨 기준 일치율: straight 100%(10/10), mug 100%(10/10), taper_smooth 60%(6/10), **taper_step 30%(3/10)**, 전체 72.5%(29/40) | - | **taper_step 6/10이 mug로 오분류** — 원인 확정: `get_mask()`가 몸통을 놓치고 금속 뚜껑/테두리만 마스크로 잡는 경우가 반복됨 → 높이가 과소측정되어 height/diameter≤1.5(mug 조건)를 충족해버림. 그림자/색충돌 케이스(9/14 실험)와 별개로, **taper_step 특유의 "몸통 놓침" 실패 모드**가 구조적으로 반복됨을 n=40에서 확인. 마스크가 몸통까지 제대로 잡힌 3장은 전부 정확히 분류됨 — 로직 자체는 문제없고 세그멘테이션이 병목. taper_smooth의 오분류(mug 2, taper_step 2)는 원인 미분석. **주의**: raw2 라벨은 미검수 상태라 일치율에 "엉뚱한 이미지가 섞여서 생긴 불일치"도 일부 포함될 수 있음(둘을 분리 못 함) |
 | 2026-09-15 | Claude | `get_mask()`에 Canny 엣지 기반 마스크(`_rough_mask_canny`)를 Otsu와 OR로 합쳐 GrabCut 시드로 사용하도록 개선 후 동일 40장 재실행 | straight 90%(9/10), taper_smooth 50%(5/10), **taper_step 60%(6/10)**, mug 100%(10/10), 전체 **75.0%(30/40)** | - | 원인 진단: 실패 6장 중 3장(101/65/83.jpg)이 흰색 텀블러+흰색 배경이라 Otsu 전경 비율이 1.3~5.6%까지 떨어짐(명도 대비 자체가 없음) — Canny는 명도 절대값이 아니라 옅은 경계선을 보므로 이 케이스에 강함. **taper_step 30%→60%로 2배 개선, 전체도 순개선(72.5%→75%)**. 단, straight·taper_smooth에서 각 1건씩 새 오분류 발생(Canny가 배경 텍스처를 같이 잡는 부작용으로 추정, 미분석) — trade-off 있는 개선. 여전히 실패: 70.jpg(클로즈업 사진, 데이터 문제이지 알고리즘 문제 아님), 63.jpg(복잡한 야외 배경) |
 
-## Mask R-CNN (`src/models/dl1_maskrcnn/`)
+## Mask R-CNN (`src/deep_learning/dl1_maskrcnn/`)
 
 | 날짜 | 담당자 | 변경 사항 | Val 정확도 | Test 정확도 | 비고 |
 |---|---|---|---|---|---|
 | 2026-09-15 | Claude | `segment.py` 최초 구현(COCO 사전학습 `maskrcnn_resnet50_fpn_v2`, 제로샷·fine-tuning 없음) + `rule_based_raw2_sample.ipynb`와 동일한 40장(seed=42)에 룰베이스와 나란히 비교 — `notebooks/maskrcnn_vs_rule_based.ipynb` | - (raw2, 미검증 라벨 기준 참고용) | - | **전체 75%(룰베이스) → 85%(Mask R-CNN)**. 클래스별: straight 90→100%, taper_smooth 50→70%, **taper_step 60→80%**(목표했던 개선), mug 100→90%(소폭 회귀). 추론 속도는 GPU(RTX 4050)에서 평균 150ms/장으로 룰베이스(CPU, 503ms/장, GrabCut이 병목)보다도 빠름. cup/bottle/vase/wine glass/bowl 중 점수 높은 COCO 검출을 사용 — 텀블러가 COCO 클래스에 없어서 근접 카테고리로 대체 |
 
-## ResNet-18/50 (`src/models/dl2_resnet/`)
+## ResNet-18/50 (`src/deep_learning/dl2_resnet/`)
 
 | 날짜 | 담당자 | 변경 사항 | Val 정확도 | Test 정확도 | 비고 |
 |---|---|---|---|---|---|
 | _(아직 실험 없음)_ | | | | | |
 
-## EfficientNet-B0 (`src/models/efficientnet/`)
+## EfficientNet-B0 (`src/deep_learning/efficientnet/`)
 
 | 날짜 | 담당자 | 변경 사항 | Val 정확도 | Test 정확도 | 비고 |
 |---|---|---|---|---|---|
