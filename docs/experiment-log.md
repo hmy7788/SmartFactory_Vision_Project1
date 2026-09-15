@@ -25,6 +25,7 @@
 | 날짜 | 담당자 | 변경 사항 | Val 정확도 | Test 정확도 | 비고 |
 |---|---|---|---|---|---|
 | 2026-09-15 | Claude | `segment.py` 최초 구현(COCO 사전학습 `maskrcnn_resnet50_fpn_v2`, 제로샷·fine-tuning 없음) + `rule_based_raw2_sample.ipynb`와 동일한 40장(seed=42)에 룰베이스와 나란히 비교 — `notebooks/maskrcnn_vs_rule_based.ipynb` | - (raw2, 미검증 라벨 기준 참고용) | - | **전체 75%(룰베이스) → 85%(Mask R-CNN)**. 클래스별: straight 90→100%, taper_smooth 50→70%, **taper_step 60→80%**(목표했던 개선), mug 100→90%(소폭 회귀). 추론 속도는 GPU(RTX 4050)에서 평균 150ms/장으로 룰베이스(CPU, 503ms/장, GrabCut이 병목)보다도 빠름. cup/bottle/vase/wine glass/bowl 중 점수 높은 COCO 검출을 사용 — 텀블러가 COCO 클래스에 없어서 근접 카테고리로 대체 |
+| 2026-09-15 | Claude | 룰베이스 마스크를 pseudo-label 삼아 fine-tuning 시도 (배경/텀블러 2클래스, 평가용 40장은 학습에서 제외, `classify_shape()`가 폴더 라벨과 맞은 것만 채택) — `notebooks/maskrcnn_finetune_rulebase_pseudolabels.ipynb`. 학습 266장(3 epoch, 1197s, loss 0.376→0.140), GPU RTX 4050 | 동일 40장(held-out) 재평가: 78%(31/40) | - | **제로샷(85%)보다 오히려 나빠짐(78%) — 우려했던 리스크가 실제로 발생.** straight 100→80%, taper_smooth 70→60%, taper_step 80→70% 전부 회귀, mug만 90→100%(가장 많이 채택된 클래스라 치우침 발생). 원인: (1) 클래스별 pseudo-label 채택 수가 심하게 불균형(mug 88 / straight 81 / taper_smooth 64 / **taper_step 33** — 룰베이스가 약한 클래스일수록 채택 수도 적어져서 학습 데이터가 mug 쪽으로 편향), (2) 룰베이스 마스크의 거친 경계가 COCO 학습으로 얻은 정밀한 마스크 품질을 깎아먹은 것으로 추정. **결론: 이 체크포인트는 폐기, dl1 트랙은 제로샷 버전(`segment.py`의 기본 `load_model()`)을 계속 사용.** 체크포인트는 `checkpoints/maskrcnn_finetuned_rulebase_pseudolabels.pth`에 남겨두되 실사용 안 함(참고 기록용) |
 
 ## ResNet-18/50 (`src/deep_learning/dl2_resnet/`)
 

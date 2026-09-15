@@ -29,6 +29,15 @@
 
 ## 로그
 
+## [2026-09-15] 룰베이스 pseudo-label로 Mask R-CNN fine-tuning → 오히려 성능 하락
+
+- **트랙/영역**: deep_learning / dl1_maskrcnn — `notebooks/maskrcnn_finetune_rulebase_pseudolabels.ipynb`
+- **증상**: 제로샷 Mask R-CNN(85%, `maskrcnn_vs_rule_based.ipynb`)보다 fine-tuning 후(78%)가 더 낮음. 같은 held-out 40장으로 재평가해 확인(학습 데이터에는 이 40장을 애초에 제외했으므로 데이터 누수 아님).
+- **원인**: (1) 룰베이스 `classify_shape()`가 폴더 라벨과 맞은 것만 pseudo-label로 채택했는데, 클래스별 채택 수가 크게 불균형(mug 88 / straight 81 / taper_smooth 64 / taper_step 33) — 룰베이스가 원래 약한 클래스(taper_step)일수록 "맞은 것"도 적게 남아서 학습셋이 mug 쪽으로 편향됨. (2) 룰베이스 마스크 자체가 Otsu/Canny/GrabCut 특유의 거친 경계를 가지고 있어서, COCO로 학습된 원래의 정밀한 마스크 품질을 깎아먹었을 가능성.
+- **해결**: 이 fine-tuning 접근은 폐기. dl1 트랙은 제로샷(사전학습 그대로, `segment.py`의 기본 `load_model()`)을 계속 사용. 파인튜닝된 체크포인트(`checkpoints/maskrcnn_finetuned_rulebase_pseudolabels.pth`)는 실사용 금지, 기록용으로만 남김.
+- **교훈**: 약한 방법(룰베이스)의 출력을 강한 방법(사전학습 Mask R-CNN)의 정답으로 쓰는 self-distillation은, 필터링을 해도 여전히 위험함 — 필터링 자체가 원래 약한 클래스의 학습 데이터를 더 줄여서 불균형을 악화시킬 수 있음. 다음에 시도한다면 클래스별로 pseudo-label 수를 강제로 맞추거나(undersampling/oversampling), 애초에 사람이 직접 마스크를 그린 소량의 진짜 정답을 섞는 게 나을 것.
+- **관련 파일**: `notebooks/maskrcnn_finetune_rulebase_pseudolabels.ipynb`, `docs/experiment-log.md`
+
 ## [2026-09-15] get_mask()에 Canny 엣지 기반 마스크 추가 — taper_step 개선, 부작용도 있음
 
 - **트랙/영역**: rule_based / shape_classifier.py::get_mask, `_rough_mask_canny`
