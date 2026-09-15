@@ -29,6 +29,14 @@
 
 ## 로그
 
+## [2026-09-15] Bing/Google 크롤링 결과에 쇼핑몰 "상세페이지" 이미지가 섞임
+
+- **트랙/영역**: data_collection / search_crawler.py
+- **증상**: `--class straight --engines bing`으로 "일자 텀블러" 검색 시, 텀블러 실물 사진이 아니라 980x4500px 같은 세로로 아주 긴 이미지가 섞여 나옴 — 한국 쇼핑몰 상품 "상세페이지"를 통째로 캡처한 이미지(여러 제품컷+마케팅 문구가 세로로 이어붙은 형태)였음.
+- **원인**: Bing/Google 이미지 검색이 썸네일 뒤의 "원본 이미지"를 그대로 가져오는데, 쇼핑몰들이 상세페이지 자체를 하나의 긴 이미지로 등록해두는 경우가 많아서 검색 결과에 섞임.
+- **해결**: `search_crawler.py`에 가로세로 비율 필터(`MAX_ASPECT_RATIO=2.2`) 추가 — 다운로드 직후 비율이 비정상적으로 긴 이미지를 자동 삭제. 단, 이건 극단적으로 긴 이미지만 걸러낼 뿐, 정상 비율의 스크린샷(상품 리스트 캡처 등)은 못 거름 — **사람 검수는 여전히 필수.**
+- **관련 파일**: `src/data_collection/search_crawler.py` (`_remove_extreme_aspect_ratio_images`)
+
 ## [2026-09-14] cv2.convexityDefects 반환 shape이 환경마다 다름
 
 - **트랙/영역**: rule_based / shape_classifier.py::detect_handle

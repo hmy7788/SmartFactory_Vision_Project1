@@ -41,5 +41,9 @@
 
 ## 다음 단계
 
-- `src/data_collection/search_crawler.py`: 클래스별 검색어로 Google/Bing에서 후보 이미지 자동 다운로드 (`icrawler` 필요, 미설치 상태)
-- 검수 도구: 다운로드된 이미지를 빠르게 넘겨보며 `train/{class}` 또는 `_hold`로 분류하는 간단한 스크립트 (아직 미구현)
+- ~~`src/data_collection/search_crawler.py`~~ **구현 완료** (2026-09-15) — 클래스별 검색어로 Google/Bing에서 후보 이미지 자동 다운로드, `data/raw/<class>/<engine>_<keyword>/`에 저장. 가로세로 비율 필터로 쇼핑몰 "상세페이지" 이미지 일부 자동 제거 (`docs/troubleshooting.md` 참고). 사용법:
+  ```powershell
+  python src/data_collection/search_crawler.py --class straight --max-per-keyword 50
+  python src/data_collection/search_crawler.py --class all --max-per-keyword 50 --engines bing
+  ```
+- 검수 도구: 다운로드된 이미지를 빠르게 넘겨보며 `train/{class}` 또는 `_hold`로 분류하는 간단한 스크립트 (아직 미구현) — **다음 작업.** 자동 필터로 못 거르는 부정확한 이미지(엉뚱한 물건, UI 스크린샷 등)가 여전히 섞여 있으므로 필수.

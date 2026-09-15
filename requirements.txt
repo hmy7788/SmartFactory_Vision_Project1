@@ -8,3 +8,5 @@ pytest==9.1.1
 matplotlib==3.10.9
 torch==2.14.0+cu126
 torchvision==0.29.0+cu126
+icrawler==0.6.10
+Pillow==12.3.0
