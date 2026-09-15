@@ -15,10 +15,14 @@ handle_detected를 절대 사용하지 않는다. 손잡이 정보는 설명 텍
 import cv2
 import numpy as np
 
-# 임계값 — 실측 데이터 확보 후 재조정 필요 (TUNE_ME)
+# 임계값 — 2026-09-15, data/raw2 426장(Mask R-CNN 마스크 기준) 실측으로 재조정.
+# 각 갈림길을 이진분류로 놓고 정확도를 최대화하는 지점을 탐색해서 구함
+# (notebooks/threshold_calibration.ipynb). MUG는 원래 값(1.5)이 이미 최적에
+# 가까웠고, STRAIGHT/STEP은 조정 후 전체 정확도 84.5%->88.0% 개선 확인
+# (taper_smooth는 소폭 하락하는 trade-off 있음 — docs/experiment-log.md 참고).
 MUG_HEIGHT_TO_DIAMETER_MAX = 1.5
-STRAIGHT_BOTTOM_TOP_RATIO_MIN = 0.95
-STEP_JUMP_RATIO_THRESHOLD = 0.4
+STRAIGHT_BOTTOM_TOP_RATIO_MIN = 0.92
+STEP_JUMP_RATIO_THRESHOLD = 0.29
 HANDLE_DEPTH_RATIO_THRESHOLD = 0.08
 
 SHAPE_LABELS_KO = {
@@ -232,20 +236,24 @@ def classify_shape(mask: np.ndarray, n_bins: int = 10) -> dict:
 
     handle_detected = detect_handle(mask)
 
+    # 항상 계산해서 반환한다 — taper 분기가 아니어도(mug/straight로 갈려도)
+    # step_ratio 값 자체는 임계값 재조정(캘리브레이션) 등에 쓸 수 있어야 하므로.
+    deltas = smoothed[:-1] - smoothed[1:]  # 양수 = 아래로 가며 폭이 줄어듦
+    total_drop = float(smoothed[0] - smoothed[-1])
+    step_ratio = float(deltas.max() / total_drop) if total_drop > 0 else 0.0
+
     if height_diameter_ratio <= MUG_HEIGHT_TO_DIAMETER_MAX:
         shape = "mug"
     elif bottom_top_ratio >= STRAIGHT_BOTTOM_TOP_RATIO_MIN:
         shape = "straight"
     else:
-        deltas = smoothed[:-1] - smoothed[1:]  # 양수 = 아래로 가며 폭이 줄어듦
-        total_drop = float(smoothed[0] - smoothed[-1])
-        step_ratio = float(deltas.max() / total_drop) if total_drop > 0 else 0.0
         shape = "taper_step" if step_ratio > STEP_JUMP_RATIO_THRESHOLD else "taper_smooth"
 
     return {
         "shape": shape,
         "height_diameter_ratio": height_diameter_ratio,
         "bottom_top_ratio": bottom_top_ratio,
+        "step_ratio": step_ratio,
         "width_profile": profile.tolist(),
         "handle_detected": handle_detected,
     }

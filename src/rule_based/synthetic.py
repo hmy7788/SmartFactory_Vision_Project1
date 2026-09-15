@@ -64,9 +64,14 @@ def make_taper_smooth_mask(with_handle: bool = False) -> np.ndarray:
     ], dtype=np.int32)
     cv2.fillPoly(canvas, [pts], 255)
     if with_handle:
-        y_mid = (y_top + y_bottom) // 2
-        right_edge_at_mid = cx + (top_width // 2 + (bottom_width // 2 - top_width // 2) * 0.5)
-        canvas = _add_handle_bump(canvas, int(right_edge_at_mid), y_mid, protrusion=40, height=50)
+        # 구간 경계에 걸치지 않도록 1/4 높이 지점(한 구간 안)에 작게 배치한다 —
+        # 경계에 걸치면 median smoothing으로도 안 지워지는 인공적인 step이
+        # 생겨서(양쪽 구간이 서로 다른 값으로 스무딩됨) classify_shape()의
+        # 실측 기반 STEP_JUMP_RATIO_THRESHOLD를 오탐하게 만든다.
+        y_frac = 0.25
+        y_pos = int(y_top + height * y_frac)
+        right_edge = cx + (top_width // 2 + (bottom_width // 2 - top_width // 2) * y_frac)
+        canvas = _add_handle_bump(canvas, int(right_edge), y_pos, protrusion=40, height=20)
     return canvas
 
 

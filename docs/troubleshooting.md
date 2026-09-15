@@ -29,6 +29,15 @@
 
 ## 로그
 
+## [2026-09-15] 임계값 재조정 후 합성 테스트 실패 — 원인은 임계값이 아니라 테스트 손잡이 위치
+
+- **트랙/영역**: rule_based / synthetic.py, shape_classifier.py — `test_taper_smooth_with_handle_stays_taper_smooth`
+- **증상**: `STEP_JUMP_RATIO_THRESHOLD`를 0.4→0.29로 실측 재조정한 뒤 pytest 재실행하니, "손잡이 달린 테이퍼는 여전히 taper_smooth여야 한다" 회귀 테스트가 실패(`taper_step`으로 오분류됨).
+- **원인**: `make_taper_smooth_mask(with_handle=True)`가 손잡이를 몸통 높이의 정확히 절반(`(y_top+y_bottom)//2`) 지점에 배치했는데, 이 지점이 하필 폭 프로파일의 4번째/5번째 구간(bin) 경계였음. 손잡이가 두 구간에 걸쳐 있으면 median smoothing(window=5,7,9 다 동일)으로도 완전히 안 지워지고, 구간 경계에서 인접 구간과의 값 차이로 인한 잔여 "단차"(step_ratio≈0.333)가 생김 — 이게 새 임계값 0.29를 넘어버림. window 크기를 늘려도 이 잔여값은 안 줄어듦(구조적 아티팩트라 smoothing으로 해결 안 되는 종류).
+- **해결**: 손잡이를 구간 경계가 아니라 몸통 높이 1/4 지점(한 구간 안쪽)으로 옮기고 크기도 줄임(`protrusion=40, height=20`) → step_ratio가 0.222로 떨어져 안전하게 통과. `_add_handle_bump` 호출부 자체는 안 바꾸고 `make_taper_smooth_mask`의 호출 파라미터만 조정.
+- **교훈**: 합성 테스트 마스크를 만들 때 "구간 경계에 걸치는 위치"는 median smoothing이 못 지우는 인공적인 단차를 만들 수 있다 — 실제 사진에서도 손잡이가 하필 구간 경계 부근에 있으면 비슷한 문제가 생길 수 있다는 뜻이기도 함(미검증, 실사진에서 아직 관찰 안 됨).
+- **관련 파일**: `src/rule_based/synthetic.py` (`make_taper_smooth_mask`), `src/rule_based/shape_classifier.py`(임계값 자체는 정상, `step_ratio`를 항상 반환하도록 리팩터링)
+
 ## [2026-09-15] 룰베이스 pseudo-label로 Mask R-CNN fine-tuning → 오히려 성능 하락
 
 - **트랙/영역**: deep_learning / dl1_maskrcnn — `notebooks/maskrcnn_finetune_rulebase_pseudolabels.ipynb`
