@@ -14,7 +14,7 @@ import os
 import re
 import sys
 
-sys.stdout.reconfigure(line_buffering=True)  # 파일로 리다이렉트돼도 print가 즉시 보이도록
+sys.stdout.reconfigure(line_buffering=True, encoding="utf-8")  # 리다이렉트 시 즉시 출력 + cp949 인코딩 에러 방지
 
 from icrawler.builtin import BingImageCrawler, GoogleImageCrawler
 from PIL import Image, UnidentifiedImageError

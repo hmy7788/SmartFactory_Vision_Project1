@@ -32,7 +32,7 @@
 
 | 날짜 | 담당자 | 변경 사항 | Val 정확도 | Test 정확도 | 비고 |
 |---|---|---|---|---|---|
-| _(아직 실험 없음)_ | | | | | |
+| 2026-09-15 | Claude | `train.py` 최초 구현 — ResNet-18 ImageNet 사전학습, 백본 freeze(FC layer만 학습), `data/preprocess`(642장, 강한 신호 제외) 층화 80/20 분할, 증강에 `RandomPerspective` 포함(촬영 각도 왜곡을 직접 겨냥), 20 epoch, GPU RTX 4050(145s) | **91.3%**(best epoch 12) | **58.9%**(33/56, data/test 실촬영) | **압도적 개선**: 같은 Test 세트에서 룰베이스 18%, Mask R-CNN 39% 대비 두 배 가까이 높음 — 기하학적 규칙(`classify_shape`) 대신 학습된 시각 패턴을 쓰는 게 촬영 각도 왜곡에 훨씬 강하다는 가설이 실측으로 확인됨. Val→Test 하락폭은 32.4%p로 여전히 크지만(진짜 domain shift), 절대 정확도 자체가 크게 앞섬. Val 클래스별 F1: straight 0.928, taper_smooth 0.903, taper_step 0.857, mug 0.955 — 고르게 좋음. **Test에서는 mug만 1/6(17%)로 급락**(4장이 taper_step으로 오분류) — 표본이 6장뿐이라 노이즈 가능성 있음, 확대 검증 필요. 그래프: `reports/figures/resnet18_{training_curves,val_confusion_matrix,test_confusion_matrix}.png`, 체크포인트: `checkpoints/resnet18_shape.pth` |
 
 ## EfficientNet-B0 (`src/deep_learning/efficientnet/`)
 
@@ -50,3 +50,4 @@
 |---|---|---|---|---|
 | 2026-09-15 | 룰베이스 | raw2(≈val 성격) 65.8% → **Test 18%** (47.7%p 하락) | straight/taper_smooth/taper_step 전부 → mug로 대량 오분류 | `notebooks/test_set_evaluation.ipynb`. data/test는 직접 촬영한 진짜 Test 세트(56장). 원인: (1) 위에서 내려다본 촬영 각도 때문에 원근 왜곡으로 직선이 테이퍼져 보이고 키가 눌려 보임 — README가 이미 예견한 위험(\"각도에 따라 왜곡/소실\"), (2) 일부 taper_step은 원래도 짧고 통통한 디자인이라 mug 경계(h/d≤1.5)에 가까워서 살짝만 눌려도 넘어감. 코드 버그 아님 — 2D 폭 프로파일 방식의 근본 한계, 촬영 각도(정면 비율)를 프로토콜대로 지키거나 원근 보정이 필요 |
 | 2026-09-15 | Mask R-CNN | raw2 88.0% → **Test 39%** (49.0%p 하락) | straight → taper_step/taper_smooth로 분산, mug → taper_step 대량 오분류 | 같은 원인(촬영 각도). Mask R-CNN의 마스크 자체는 룰베이스보다 낫지만, 마스크 이후의 `classify_shape()`(폭 프로파일 기반)는 두 트랙이 공유하므로 각도 왜곡에는 똑같이 취약함 — 마스크 품질 문제가 아니라 기하학적 가정(정면 촬영)이 깨진 것 |
+| 2026-09-15 | ResNet-18 | preprocess val 91.3% → **Test 58.9%** (32.4%p 하락) | mug → taper_step 대량 오분류(6장 중 4장, 표본 작음) | **같은 domain shift인데도 하락 후 절대 정확도가 룰베이스(18%)·Mask R-CNN(39%)보다 훨씬 높음.** 기하 규칙 대신 학습된 시각 패턴을 쓰는 게 촬영 각도 왜곡에 강하다는 가설 확인. 각도 왜곡을 겨냥한 `RandomPerspective` 증강 포함. 4트랙 중 처음으로 "회피"가 아니라 "정면 돌파"에 가까운 결과 |

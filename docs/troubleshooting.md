@@ -29,6 +29,15 @@
 
 ## 로그
 
+## [2026-09-15] print()의 em-dash(—) 때문에 학습 스크립트가 마지막 단계에서 크래시
+
+- **트랙/영역**: 전체 스크립트 공통 — `src/deep_learning/dl2_resnet/train.py`에서 첫 발견
+- **증상**: ResNet-18 학습(20 epoch, 145초) + Val 평가까지 전부 성공하고, 마지막 `data/test` domain shift 평가 직전 `UnicodeEncodeError: 'cp949' codec can't encode character '—'`로 크래시. 학습 결과(체크포인트, Val 지표)는 이미 저장됐지만 Test 평가·그래프는 유실됨.
+- **원인**: `print()`에 em-dash(`—`, U+2014) 같은 cp949(Windows 한글 코드페이지)에 아예 없는 문자가 들어가면, 한글(가~힣)은 cp949로 인코딩되지만 이런 특수문자는 조용히 깨지는 게 아니라 **예외를 던지며 프로세스가 죽는다.** 이전에 고친 "print가 끝까지 안 보이는" 버퍼링 문제와는 별개의, 더 심각한 문제.
+- **해결**: `sys.stdout.reconfigure(line_buffering=True, encoding="utf-8")` — buffering뿐 아니라 인코딩도 명시적으로 utf-8로 강제. `src/data_collection/`의 기존 스크립트 5개 + `train.py` 전부에 적용.
+- **교훈**: 이 저장소에서 만드는 모든 실행 스크립트는 처음부터 `sys.stdout.reconfigure(line_buffering=True, encoding="utf-8")`를 넣고 시작할 것 — 한글은 cp949로 되니까 괜찮다고 방심하면 em-dash, 화살표(→), 문장부호(", ') 등에서 똑같이 터진다. 오래 걸리는 학습/처리 스크립트일수록 마지막 한 줄 때문에 결과를 통째로 날릴 수 있어 특히 중요.
+- **관련 파일**: `src/deep_learning/dl2_resnet/train.py`, `src/data_collection/*.py` 전체
+
 ## [2026-09-15] data/test 실사진에서 정확도 급락(66~88% → 18~39%) — 촬영 각도 원근 왜곡
 
 - **트랙/영역**: rule_based, deep_learning/dl1_maskrcnn (둘 다 `classify_shape()` 공유) — `notebooks/test_set_evaluation.ipynb`

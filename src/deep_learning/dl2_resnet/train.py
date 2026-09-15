@@ -1,0 +1,308 @@
+"""ResNet-18/50 전이학습 — dl2 트랙 (텀블러 형태 4종 분류).
+
+사전학습된 ResNet의 마지막 FC layer만 우선 fine-tuning한다(--no-freeze-backbone으로
+백본까지 풀 수 있음, 18<->50 비교용). data/preprocess(강한 신호 제외된 라벨)로
+train/val을 클래스별 층화 분할하고, data/test(실제 촬영)로 domain shift까지 평가한다.
+
+촬영 각도(원근) 왜곡이 이 프로젝트의 제일 큰 실패 원인으로 확인됐기 때문에
+(docs/troubleshooting.md), 학습 증강에 RandomPerspective를 넣어 이 각도 변화에
+강해지도록 겨냥했다.
+
+출력:
+    checkpoints/<model>_shape.pth              최고 val 정확도 체크포인트
+    reports/figures/<model>_training_curves.png  epoch별 loss/accuracy
+    reports/figures/<model>_val_confusion_matrix.png
+    reports/figures/<model>_test_confusion_matrix.png (data/test 있을 때)
+
+실행:
+    python src/deep_learning/dl2_resnet/train.py --model resnet18 --epochs 20
+    python src/deep_learning/dl2_resnet/train.py --model resnet50 --no-freeze-backbone
+"""
+
+import argparse
+import os
+import random
+import sys
+import time
+from collections import defaultdict
+
+sys.stdout.reconfigure(line_buffering=True, encoding="utf-8")  # 리다이렉트 시 즉시 출력 + cp949 인코딩 에러 방지
+
+import matplotlib
+matplotlib.use("Agg")  # 화면 없이 파일로만 저장
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torch.nn as nn
+from PIL import Image, ImageOps
+from torch.utils.data import DataLoader, Dataset
+from torchvision import models, transforms
+
+plt.rcParams["font.family"] = "Malgun Gothic"
+plt.rcParams["axes.unicode_minus"] = False
+
+CLASSES = ["straight", "taper_smooth", "taper_step", "mug"]
+CLASS_TO_IDX = {c: i for i, c in enumerate(CLASSES)}
+
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
+
+
+def exif_safe_loader(path: str):
+    """cv2와 달리 PIL은 기본적으로 EXIF 방향을 안 따르므로 명시적으로 보정한다."""
+    with Image.open(path) as img:
+        img = ImageOps.exif_transpose(img)
+        return img.convert("RGB")
+
+
+def list_samples(root: str):
+    """root/<class>/*.jpg|png 를 (path, label) 리스트로 수집."""
+    samples = []
+    for cls in CLASSES:
+        class_dir = os.path.join(root, cls)
+        if not os.path.isdir(class_dir):
+            continue
+        for name in sorted(os.listdir(class_dir)):
+            if os.path.splitext(name)[1].lower() in (".jpg", ".jpeg", ".png"):
+                samples.append((os.path.join(class_dir, name), CLASS_TO_IDX[cls]))
+    return samples
+
+
+class ShapeDataset(Dataset):
+    def __init__(self, samples, transform):
+        self.samples = samples
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        path, label = self.samples[idx]
+        image = exif_safe_loader(path)
+        return self.transform(image), label
+
+
+def stratified_split(samples, val_ratio: float, seed: int):
+    """클래스별로 나눠서 섞은 뒤 val_ratio만큼 val로 뺀다 (개체 단위 분할은 아님 —
+    raw2/preprocess에 물건 식별 정보가 없어서 이미지 단위 분할로 근사, 알려진 한계)."""
+    by_class = defaultdict(list)
+    for path, label in samples:
+        by_class[label].append((path, label))
+    rng = random.Random(seed)
+    train, val = [], []
+    for items in by_class.values():
+        items = items[:]
+        rng.shuffle(items)
+        n_val = max(1, int(len(items) * val_ratio))
+        val.extend(items[:n_val])
+        train.extend(items[n_val:])
+    rng.shuffle(train)
+    rng.shuffle(val)
+    return train, val
+
+
+def build_model(arch: str, freeze_backbone: bool):
+    if arch == "resnet18":
+        model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    elif arch == "resnet50":
+        model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    else:
+        raise ValueError(arch)
+
+    if freeze_backbone:
+        for param in model.parameters():
+            param.requires_grad = False
+
+    in_features = model.fc.in_features
+    model.fc = nn.Linear(in_features, len(CLASSES))  # 새로 만든 레이어는 항상 학습됨
+    return model
+
+
+def run_epoch(model, loader, criterion, optimizer, device, train: bool):
+    model.train() if train else model.eval()
+    total_loss, total_correct, total_n = 0.0, 0, 0
+    with torch.set_grad_enabled(train):
+        for images, labels in loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            if train:
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+            total_loss += loss.item() * images.size(0)
+            total_correct += (outputs.argmax(1) == labels).sum().item()
+            total_n += images.size(0)
+    return total_loss / total_n, total_correct / total_n
+
+
+def evaluate_confusion(model, loader, device):
+    model.eval()
+    matrix = np.zeros((len(CLASSES), len(CLASSES)), dtype=int)
+    with torch.no_grad():
+        for images, labels in loader:
+            images = images.to(device)
+            preds = model(images).argmax(1).cpu().numpy()
+            for t, p in zip(labels.numpy(), preds):
+                matrix[t, p] += 1
+    return matrix
+
+
+def plot_training_curves(history, out_path: str):
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+    epochs = range(1, len(history["train_loss"]) + 1)
+    axes[0].plot(epochs, history["train_loss"], label="train")
+    axes[0].plot(epochs, history["val_loss"], label="val")
+    axes[0].set_title("Loss")
+    axes[0].set_xlabel("epoch")
+    axes[0].legend()
+    axes[1].plot(epochs, history["train_acc"], label="train")
+    axes[1].plot(epochs, history["val_acc"], label="val")
+    axes[1].set_title("Accuracy")
+    axes[1].set_xlabel("epoch")
+    axes[1].set_ylim(0, 1)
+    axes[1].legend()
+    plt.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+
+
+def plot_confusion(matrix, title: str, out_path: str):
+    fig, ax = plt.subplots(figsize=(5.5, 5))
+    im = ax.imshow(matrix, cmap="Blues")
+    ax.set_xticks(range(len(CLASSES)))
+    ax.set_yticks(range(len(CLASSES)))
+    ax.set_xticklabels(CLASSES, rotation=30, ha="right")
+    ax.set_yticklabels(CLASSES)
+    ax.set_xlabel("예측")
+    ax.set_ylabel("실제")
+    ax.set_title(title)
+    vmax = matrix.max() if matrix.max() > 0 else 1
+    for i in range(len(CLASSES)):
+        for j in range(len(CLASSES)):
+            color = "white" if matrix[i, j] > vmax * 0.5 else "black"
+            ax.text(j, i, str(matrix[i, j]), ha="center", va="center", color=color)
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    plt.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+
+
+def precision_recall_f1(matrix):
+    results = {}
+    for i, cls in enumerate(CLASSES):
+        tp = matrix[i, i]
+        fp = matrix[:, i].sum() - tp
+        fn = matrix[i, :].sum() - tp
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+        results[cls] = (precision, recall, f1)
+    return results
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--data-root", default="data/preprocess")
+    parser.add_argument("--test-root", default="data/test")
+    parser.add_argument("--model", choices=["resnet18", "resnet50"], default="resnet18")
+    parser.add_argument("--epochs", type=int, default=20)
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--val-split", type=float, default=0.2)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--freeze-backbone", action="store_true", default=True)
+    parser.add_argument("--no-freeze-backbone", dest="freeze_backbone", action="store_false")
+    parser.add_argument("--out-dir", default="reports/figures")
+    parser.add_argument("--checkpoint-dir", default="checkpoints")
+    args = parser.parse_args()
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"device: {device}")
+    print(f"model: {args.model}, freeze_backbone={args.freeze_backbone}, epochs={args.epochs}")
+
+    samples = list_samples(args.data_root)
+    print(f"{args.data_root}: 총 {len(samples)}장")
+    train_samples, val_samples = stratified_split(samples, args.val_split, args.seed)
+    print(f"train {len(train_samples)}장 / val {len(val_samples)}장 (seed={args.seed})\n")
+
+    train_tf = transforms.Compose([
+        transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomPerspective(distortion_scale=0.35, p=0.4),  # 촬영 각도 왜곡을 겨냥한 증강
+        transforms.ColorJitter(brightness=0.2, contrast=0.2),
+        transforms.ToTensor(),
+        transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+    ])
+    eval_tf = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+    ])
+
+    train_loader = DataLoader(ShapeDataset(train_samples, train_tf), batch_size=args.batch_size,
+                               shuffle=True, num_workers=0)
+    val_loader = DataLoader(ShapeDataset(val_samples, eval_tf), batch_size=args.batch_size,
+                             shuffle=False, num_workers=0)
+
+    model = build_model(args.model, args.freeze_backbone).to(device)
+    criterion = nn.CrossEntropyLoss()
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.Adam(trainable_params, lr=args.lr)
+
+    history = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": []}
+    t_start = time.time()
+    best_val_acc = 0.0
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
+    ckpt_path = os.path.join(args.checkpoint_dir, f"{args.model}_shape.pth")
+
+    for epoch in range(1, args.epochs + 1):
+        train_loss, train_acc = run_epoch(model, train_loader, criterion, optimizer, device, train=True)
+        val_loss, val_acc = run_epoch(model, val_loader, criterion, optimizer, device, train=False)
+        history["train_loss"].append(train_loss)
+        history["train_acc"].append(train_acc)
+        history["val_loss"].append(val_loss)
+        history["val_acc"].append(val_acc)
+        elapsed = time.time() - t_start
+        print(f"epoch {epoch:3d}/{args.epochs}  train_loss={train_loss:.4f} train_acc={train_acc:.3f}  "
+              f"val_loss={val_loss:.4f} val_acc={val_acc:.3f}  ({elapsed:.0f}s 누적)")
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            torch.save(model.state_dict(), ckpt_path)
+
+    print(f"\n학습 완료. 최고 val_acc={best_val_acc:.3f}, 체크포인트: {ckpt_path}")
+
+    model.load_state_dict(torch.load(ckpt_path, map_location=device))
+
+    os.makedirs(args.out_dir, exist_ok=True)
+    curves_path = os.path.join(args.out_dir, f"{args.model}_training_curves.png")
+    plot_training_curves(history, curves_path)
+    print(f"학습 곡선 저장: {curves_path}")
+
+    val_matrix = evaluate_confusion(model, val_loader, device)
+    val_cm_path = os.path.join(args.out_dir, f"{args.model}_val_confusion_matrix.png")
+    plot_confusion(val_matrix, f"{args.model} Val Confusion Matrix", val_cm_path)
+    print(f"Val confusion matrix 저장: {val_cm_path}")
+
+    print("\nVal 클래스별 precision/recall/F1")
+    for cls, (p, r, f1) in precision_recall_f1(val_matrix).items():
+        print(f"  {cls:14s} precision={p:.3f} recall={r:.3f} f1={f1:.3f}")
+
+    test_samples = list_samples(args.test_root)
+    if test_samples:
+        print(f"\n{args.test_root}: 총 {len(test_samples)}장 - domain shift 평가")
+        test_loader = DataLoader(ShapeDataset(test_samples, eval_tf), batch_size=args.batch_size,
+                                  shuffle=False, num_workers=0)
+        _, test_acc = run_epoch(model, test_loader, criterion, optimizer, device, train=False)
+        test_matrix = evaluate_confusion(model, test_loader, device)
+        test_cm_path = os.path.join(args.out_dir, f"{args.model}_test_confusion_matrix.png")
+        plot_confusion(test_matrix, f"{args.model} Test(실촬영) Confusion Matrix", test_cm_path)
+        print(f"Test confusion matrix 저장: {test_cm_path}")
+        print(f"\nVal acc={best_val_acc:.3f} -> Test acc={test_acc:.3f} (하락폭 {best_val_acc - test_acc:+.3f})")
+    else:
+        print(f"\n{args.test_root}에 이미지가 없어 domain shift 평가를 건너뜀")
+
+
+if __name__ == "__main__":
+    main()
