@@ -24,7 +24,7 @@
 
 | 날짜 | 담당자 | 변경 사항 | Val 정확도 | Test 정확도 | 비고 |
 |---|---|---|---|---|---|
-| _(아직 실험 없음)_ | | | | | |
+| 2026-09-15 | Claude | `segment.py` 최초 구현(COCO 사전학습 `maskrcnn_resnet50_fpn_v2`, 제로샷·fine-tuning 없음) + `rule_based_raw2_sample.ipynb`와 동일한 40장(seed=42)에 룰베이스와 나란히 비교 — `notebooks/maskrcnn_vs_rule_based.ipynb` | - (raw2, 미검증 라벨 기준 참고용) | - | **전체 75%(룰베이스) → 85%(Mask R-CNN)**. 클래스별: straight 90→100%, taper_smooth 50→70%, **taper_step 60→80%**(목표했던 개선), mug 100→90%(소폭 회귀). 추론 속도는 GPU(RTX 4050)에서 평균 150ms/장으로 룰베이스(CPU, 503ms/장, GrabCut이 병목)보다도 빠름. cup/bottle/vase/wine glass/bowl 중 점수 높은 COCO 검출을 사용 — 텀블러가 COCO 클래스에 없어서 근접 카테고리로 대체 |
 
 ## ResNet-18/50 (`src/models/dl2_resnet/`)
 
