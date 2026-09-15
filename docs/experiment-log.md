@@ -66,6 +66,16 @@
 
 ---
 
+## Custom CNN (`src/deep_learning/custom_cnn/`) — 구현 공부/실험용, 4트랙 비교 제외
+
+**4트랙(룰베이스/Mask R-CNN/ResNet/EfficientNet) 공식 비교표에는 넣지 않는다.** 사전학습 없이 직접 설계한 작은 CNN(conv block 4개+GAP+Dropout+FC, `model.py`)을 `data/preprocess`만으로 처음부터 학습해서, "왜 전이학습(ResNet)이 유리한가"를 확인하는 대조군 실험.
+
+| 날짜 | 담당자 | 변경 사항 | Val 정확도 | Test 정확도 | 비고 |
+|---|---|---|---|---|---|
+| 2026-09-16 | Claude | `model.py`(SimpleCNN, 채널 32→64→128→256) + `train.py`(dl2_resnet과 동일 패턴, 입력 128x128, RandomPerspective 포함) 최초 구현, 40 epoch 학습 | 66.9%(best epoch 33) | **24.0%(25/104), Macro-F1 0.233** | Val 곡선이 처음부터 끝까지 진동함(예: epoch 28에서 val_acc 0.480→0.339로 급락 후 재상승) — 사전학습 특징 없이 515장만으로 학습하니 일반화가 불안정하다는 신호. **Test에서 완전히 무너짐**: straight recall 7.9%, taper_smooth recall 9.1% — 대부분 mug로 예측(mug recall 100%, precision 12.0%)해서 룰베이스와 비슷한 "애매하면 mug" 붕괴 패턴 재현. **결론**: ResNet-18 unfreeze(Test 79.8%, Macro-F1 0.769)와의 격차(정확도 55.8%p, Macro-F1 0.536)가 이 데이터 규모(train 515장)에서 전이학습이 얼마나 결정적인지 정량적으로 보여줌 — 처음부터 학습한 CNN은 ImageNet에서 배운 저수준 시각 특징(에지·질감·색 대비) 없이는 이 정도 소규모 데이터로 일반화하기 어려움 |
+
+---
+
 ## 4갈래 종합 비교
 
 `notebooks/03_model_comparison.ipynb`에서 정기적으로 산출되는 비교 결과를 요약한다. Train(웹 이미지)→Test(실사용 이미지) 간 domain shift로 인한 정확도 하락은 의도된 평가이니, 하락 폭 자체를 비교 지표로 다룬다.
