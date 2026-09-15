@@ -2,6 +2,23 @@
 
 4갈래 트랙(룰베이스 / Mask R-CNN / ResNet / EfficientNet)의 실험 결과를 트랙별로 기록한다. **검증 대상은 시스템**이므로, 정확도 숫자만이 아니라 구현 난이도·추론 속도·실패 패턴도 함께 남긴다.
 
+## 현재 순위 요약 (2026-09-15, `data/test` 104장 기준)
+
+같은 실제 촬영 Test 세트(직접 촬영, 클래스당 10~38장, 클래스: straight/taper_smooth/taper_step/mug)로 전부 재평가한 최신 스냅샷. 아래 표만 보면 지금 가장 나은 파이프라인이 뭔지 바로 알 수 있다 — 아래쪽 트랙별 표는 그 결과에 이르기까지의 실험 과정(시행착오 포함) 기록.
+
+| 순위 | 트랙 | Test 정확도 | 비고 |
+|---|---|---|---|
+| 🥇 1 | **ResNet-18 (`--no-freeze-backbone`)** | **79.8%** (83/104) | 백본까지 fine-tuning, 차등 LR. 전 실험 통틀어 최고. 체크포인트: `checkpoints/resnet18_shape.pth` |
+| 2 | Mask R-CNN (제로샷) | 46.2% (48/104) | COCO 사전학습 그대로, fine-tuning 안 함(`src/deep_learning/dl1_maskrcnn/segment.py`) |
+| 3 | Mask R-CNN (파인튜닝) | 15.4% (16/104) | 룰베이스 pseudo-label로 fine-tuning — **실사용 안 함**, 실패 사례로 기록만 유지 |
+| 4 | 룰베이스 | 11.5% (12/104) | `src/rule_based/`. 거의 전부 mug로 쏠리는 구조적 편향 확인 |
+| - | EfficientNet-B0 | 미착수 | |
+| - | ResNet-50 | 미착수(18 vs 50 비교 아직 안 함) | |
+
+**핵심 교훈**: 이 프로젝트의 제일 큰 domain shift 원인은 **촬영 각도(원근 왜곡)** — 위에서 내려다보고 찍으면 직선이 테이퍼져 보이고 키가 눌려 보여서, 폭 프로파일 같은 **기하학적 규칙에 의존하는 트랙(룰베이스, 그리고 그 규칙을 공유하는 Mask R-CNN)일수록 크게 무너진다.** ResNet처럼 **학습된 시각 패턴**(색상·질감·손잡이 모양·맥락 등)을 쓰는 방식이 이 왜곡에 훨씬 강하다는 게 이번 실험들로 반복 확인됨. Grad-CAM으로 봐도 ResNet은 배경이 아니라 물체 본체·손잡이에 정확히 집중하고 있었다(`reports/figures/resnet18/gradcam.png`).
+
+---
+
 새 실험을 기록할 때는 각 트랙 표에 행을 추가한다. 형식:
 
 | 날짜 | 담당자 | 변경 사항 | Val 정확도 | Test 정확도 | 비고 |
@@ -20,6 +37,7 @@
 | 2026-09-15 | Claude | `data/raw2`(수집·미검증 상태)에서 클래스당 무작위 10장(n=40, seed=42) 샘플링 후 `classify_shape()` 일괄 실행 — `notebooks/rule_based_raw2_sample.ipynb` | 폴더 라벨 기준 일치율: straight 100%(10/10), mug 100%(10/10), taper_smooth 60%(6/10), **taper_step 30%(3/10)**, 전체 72.5%(29/40) | - | **taper_step 6/10이 mug로 오분류** — 원인 확정: `get_mask()`가 몸통을 놓치고 금속 뚜껑/테두리만 마스크로 잡는 경우가 반복됨 → 높이가 과소측정되어 height/diameter≤1.5(mug 조건)를 충족해버림. 그림자/색충돌 케이스(9/14 실험)와 별개로, **taper_step 특유의 "몸통 놓침" 실패 모드**가 구조적으로 반복됨을 n=40에서 확인. 마스크가 몸통까지 제대로 잡힌 3장은 전부 정확히 분류됨 — 로직 자체는 문제없고 세그멘테이션이 병목. taper_smooth의 오분류(mug 2, taper_step 2)는 원인 미분석. **주의**: raw2 라벨은 미검수 상태라 일치율에 "엉뚱한 이미지가 섞여서 생긴 불일치"도 일부 포함될 수 있음(둘을 분리 못 함) |
 | 2026-09-15 | Claude | `get_mask()`에 Canny 엣지 기반 마스크(`_rough_mask_canny`)를 Otsu와 OR로 합쳐 GrabCut 시드로 사용하도록 개선 후 동일 40장 재실행 | straight 90%(9/10), taper_smooth 50%(5/10), **taper_step 60%(6/10)**, mug 100%(10/10), 전체 **75.0%(30/40)** | - | 원인 진단: 실패 6장 중 3장(101/65/83.jpg)이 흰색 텀블러+흰색 배경이라 Otsu 전경 비율이 1.3~5.6%까지 떨어짐(명도 대비 자체가 없음) — Canny는 명도 절대값이 아니라 옅은 경계선을 보므로 이 케이스에 강함. **taper_step 30%→60%로 2배 개선, 전체도 순개선(72.5%→75%)**. 단, straight·taper_smooth에서 각 1건씩 새 오분류 발생(Canny가 배경 텍스처를 같이 잡는 부작용으로 추정, 미분석) — trade-off 있는 개선. 여전히 실패: 70.jpg(클로즈업 사진, 데이터 문제이지 알고리즘 문제 아님), 63.jpg(복잡한 야외 배경) |
 | 2026-09-15 | Claude | `classify_shape()` 임계값을 실측(data/raw2 445장, Mask R-CNN 마스크 기준)으로 재조정 — `notebooks/threshold_calibration.ipynb`. 각 갈림길을 이진분류로 놓고 정확도 최대화 지점 탐색: MUG_HEIGHT_TO_DIAMETER_MAX 1.5→1.5(유지), STRAIGHT_BOTTOM_TOP_RATIO_MIN 0.95→**0.92**, STEP_JUMP_RATIO_THRESHOLD 0.4→**0.29** | Mask R-CNN 마스크 기준(445장): 84.5%→**88.0%**. 룰베이스 마스크 기준(445장): 66.3%→65.8%(거의 변화 없음) | - | Mask R-CNN 파이프라인에서 taper_step 75.7%→88.8%로 크게 개선(전체 3.5%p↑), taper_smooth는 90.0%→83.0%로 소폭 하락(trade-off). 룰베이스는 Mask R-CNN 마스크로 캘리브레이션한 값이라 전이가 완벽하진 않지만(-0.5%p) 손해가 거의 없어 공통 채택. **부수 효과**: 합성 테스트 `test_taper_smooth_with_handle_stays_taper_smooth`가 새 임계값에 걸려 실패 → 원인은 임계값이 아니라 테스트용 손잡이 돌기가 폭 구간 경계에 걸쳐 median smoothing으로 안 지워지는 인공적 단차를 만든 것으로 확인, `synthetic.py`에서 손잡이 위치를 구간 안쪽으로 조정해 해결 (`docs/troubleshooting.md` 참고). `classify_shape()`가 `step_ratio`를 항상 반환하도록 리팩터링(이전엔 taper 분기에서만 계산됨) |
+| 2026-09-15 | Claude | `data/test` 확대판(104장, test2 병합)으로 재평가 — `src/rule_based/evaluate_test.py` 신규 작성(다른 트랙과 같은 패턴: confusion matrix를 `reports/figures/rule_based/`에 저장) | - | **11.5%(12/104)** | 이전 56장 기준(18%)보다도 낮아짐 — 표본이 늘면서 실제 약점이 더 뚜렷하게 드러남. 클래스별: straight 1/38(2.6%), taper_smooth 1/22(4.5%), taper_step 4/34(11.8%), mug 6/10(60.0%). **straight/taper_smooth/taper_step 거의 전부 mug로 쏠림**(26/38, 18/22, 28/34) — 원인은 기존과 동일(촬영 각도 원근 왜곡으로 키가 눌려 보여 mug 경계(h/d≤1.5)를 넘어버림, docs/troubleshooting.md 9/15 항목). 4트랙 중 유일하게 Test에서 mug가 제일 정확한 클래스(다른 트랙은 mug가 오히려 약하거나 평범함) — 룰베이스의 판정 로직 자체가 "애매하면 mug로 판정"하는 구조적 편향을 갖고 있음을 시사 |
 
 ## Mask R-CNN (`src/deep_learning/dl1_maskrcnn/`)
 
