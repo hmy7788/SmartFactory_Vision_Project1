@@ -13,6 +13,9 @@ import glob
 import os
 import re
 import shutil
+import sys
+
+sys.stdout.reconfigure(line_buffering=True)  # 파일로 리다이렉트돼도 print가 즉시 보이도록
 
 from PIL import Image, UnidentifiedImageError
 

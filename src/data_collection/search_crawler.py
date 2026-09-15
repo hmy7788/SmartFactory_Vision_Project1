@@ -12,6 +12,9 @@ data/raw/<class>/ 아래 저장된 뒤 사람이 4종 판정 규칙(CLAUDE.md �
 import argparse
 import os
 import re
+import sys
+
+sys.stdout.reconfigure(line_buffering=True)  # 파일로 리다이렉트돼도 print가 즉시 보이도록
 
 from icrawler.builtin import BingImageCrawler, GoogleImageCrawler
 from PIL import Image, UnidentifiedImageError
