@@ -52,6 +52,31 @@ def _rough_mask_otsu(image: np.ndarray) -> np.ndarray:
     return mask
 
 
+def _rough_mask_canny(image: np.ndarray) -> np.ndarray:
+    """엣지(윤곽선) 기반으로 대략적인 전경 마스크를 만든다.
+
+    Otsu는 명도 하나만 보므로, 물체와 배경이 둘 다 흰색/연한 색 계열이면
+    (예: 흰 텀블러 + 흰 배경) 거의 구분을 못 한다 (실측 확인: 그런 사진에서
+    Otsu 전경 비율이 3~6%까지 떨어짐 — docs/troubleshooting.md 참고). 반면
+    명도가 거의 같아도 물체 경계에는 옅은 그림자·그라데이션으로 인한 엣지가
+    남는 경우가 많아서, Canny 엣지를 닫아서(morphological close) 윤곽을
+    잡으면 이런 저대비 사진에서 Otsu보다 훨씬 잘 잡힌다.
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blurred, 20, 60)
+    edges = cv2.dilate(edges, np.ones((5, 5), np.uint8), iterations=2)
+    closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
+
+    contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    mask = np.zeros_like(gray, dtype=np.uint8)
+    if not contours:
+        return mask
+    largest = max(contours, key=cv2.contourArea)
+    cv2.drawContours(mask, [largest], -1, 255, thickness=cv2.FILLED)
+    return mask
+
+
 def _grabcut_refine(image: np.ndarray, rough_mask: np.ndarray) -> np.ndarray:
     """Otsu 결과를 시드로 GrabCut을 돌려 마스크를 정제한다.
 
@@ -94,12 +119,17 @@ def _grabcut_refine(image: np.ndarray, rough_mask: np.ndarray) -> np.ndarray:
 def get_mask(image: np.ndarray, use_grabcut: bool = True) -> np.ndarray:
     """이미지에서 전경(텀블러) 이진 마스크를 추출한다.
 
-    Otsu로 대략적인 위치를 잡고(_rough_mask_otsu), GrabCut으로 정제한다
-    (_grabcut_refine). 그래도 완벽하지 않다 — 배경과 색이 거의 같은 부분(예:
-    바닥과 겹치는 그림자)은 여전히 실패할 수 있으니, 분류 결과가 이상하면
-    저장된 마스크를 먼저 눈으로 확인할 것.
+    Otsu(명도 기반)와 Canny(엣지 기반) 두 방법으로 각각 대략적인 마스크를
+    만들어 합친 뒤 GrabCut으로 정제한다. 두 방법의 실패 유형이 서로 달라서
+    (Otsu는 저대비 배경에 약하고, Canny는 텍스처 없는 밋밋한 배경에 강함)
+    합쳐두면 한쪽이 실패해도 다른 쪽이 시드를 보완해준다. 그래도 완벽하지
+    않다 — 물체가 사진에 일부만 나오거나(클로즈업 컷) 배경이 복잡한 경우는
+    여전히 실패할 수 있으니, 분류 결과가 이상하면 저장된 마스크를 먼저 눈으로
+    확인할 것.
     """
-    rough = _rough_mask_otsu(image)
+    rough_otsu = _rough_mask_otsu(image)
+    rough_canny = _rough_mask_canny(image)
+    rough = cv2.bitwise_or(rough_otsu, rough_canny)
     if not rough.any():
         return rough
 

@@ -29,6 +29,25 @@
 
 ## 로그
 
+## [2026-09-15] get_mask()에 Canny 엣지 기반 마스크 추가 — taper_step 개선, 부작용도 있음
+
+- **트랙/영역**: rule_based / shape_classifier.py::get_mask, `_rough_mask_canny`
+- **배경**: 위 항목(taper_step 대량 오분류)의 원인을 실사진으로 직접 진단. 실패한 6장 중 3장(101/65/83.jpg)이 **흰색/크림색 텀블러 + 흰색/연회색 배경** 조합이었고, `_rough_mask_otsu()`의 전경 비율이 1.3~5.6%까지 떨어져 있었음(거의 아무것도 못 잡음) — 명도 대비가 너무 낮아 Otsu가 근본적으로 구분 불가. 나머지 1장(70.jpg)은 애초에 뚜껑 클로즈업 사진이라 몸통 자체가 안 찍힘(알고리즘 문제 아님, 데이터 문제).
+- **해결**: Canny 엣지(그림자·그라데이션으로 생기는 옅은 경계선을 봄, 명도 절대값은 안 봄) 기반 `_rough_mask_canny()`를 추가해서 `_rough_mask_otsu()` 결과와 OR로 합친 뒤 GrabCut 시드로 사용. Otsu와 Canny의 실패 유형이 서로 달라서 한쪽이 실패해도 다른 쪽이 보완함.
+- **결과 (raw2 동일 40장, seed=42, 전/후 비교)**:
+
+  | 클래스 | 이전 | 이후 |
+  |---|---|---|
+  | straight | 100%(10/10) | 90%(9/10) |
+  | taper_smooth | 60%(6/10) | 50%(5/10) |
+  | taper_step | 30%(3/10) | **60%(6/10)** |
+  | mug | 100%(10/10) | 100%(10/10) |
+  | 전체 | 72.5%(29/40) | **75.0%(30/40)** |
+
+  목표였던 taper_step은 2배 개선, 전체도 순개선. **다만 straight·taper_smooth에서 각 1건씩 새 오분류 발생** — Canny가 배경의 텍스처/그라데이션을 몸통 일부로 같이 잡아버리는 부작용으로 추정(원인 미확정, 개별 사진 분석 안 함).
+- **여전히 해결 안 되는 케이스**: 70.jpg(클로즈업, 데이터 문제), 63.jpg(복잡한 야외 배경, mug로 계속 오분류), 101.jpg(taper_step인데 이제 taper_smooth로 — mug는 벗어났지만 여전히 부정확).
+- **관련 파일**: `src/rule_based/shape_classifier.py` (`_rough_mask_canny`, `get_mask`), `notebooks/rule_based_raw2_sample.ipynb`
+
 ## [2026-09-15] taper_step이 get_mask() 몸통 누락으로 mug에 대량 오분류 (n=40 확인)
 
 - **트랙/영역**: rule_based / shape_classifier.py::get_mask, classify_shape
