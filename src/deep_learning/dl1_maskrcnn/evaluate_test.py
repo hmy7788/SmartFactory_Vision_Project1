@@ -163,9 +163,10 @@ def main() -> None:
     print(f"{'전체 정확도':14s} {zs_correct}/{total} ({zs_correct/total*100:4.1f}%)   "
           f"{ft_correct}/{total} ({ft_correct/total*100:4.1f}%)")
 
-    os.makedirs(args.out_dir, exist_ok=True)
-    zs_path = os.path.join(args.out_dir, "maskrcnn_zeroshot_test_confusion_matrix.png")
-    ft_path = os.path.join(args.out_dir, "maskrcnn_finetuned_test_confusion_matrix.png")
+    out_dir = os.path.join(args.out_dir, "maskrcnn")  # reports/figures/maskrcnn/ — 모델별로 폴더 분리
+    os.makedirs(out_dir, exist_ok=True)
+    zs_path = os.path.join(out_dir, "zeroshot_test_confusion_matrix.png")
+    ft_path = os.path.join(out_dir, "finetuned_test_confusion_matrix.png")
     plot_confusion(zs_matrix, "Mask R-CNN 제로샷 Test Confusion Matrix", zs_path)
     plot_confusion(ft_matrix, "Mask R-CNN 파인튜닝 Test Confusion Matrix", ft_path)
     print(f"\n confusion matrix 저장: {zs_path}, {ft_path}")

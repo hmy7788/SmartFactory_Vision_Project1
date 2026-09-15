@@ -150,8 +150,9 @@ def main() -> None:
             print(f"  [{cls}] {os.path.basename(path)}: 예측={pred_cls} ({'맞음' if mark=='O' else '틀림'})")
 
     plt.tight_layout()
-    os.makedirs(args.out_dir, exist_ok=True)
-    out_path = os.path.join(args.out_dir, f"{args.model}_gradcam.png")
+    out_dir = os.path.join(args.out_dir, args.model)  # reports/figures/<model>/ — 모델별로 폴더 분리
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, "gradcam.png")
     fig.savefig(out_path, dpi=120)
     plt.close(fig)
     print(f"\nGrad-CAM 그리드 저장: {out_path}")

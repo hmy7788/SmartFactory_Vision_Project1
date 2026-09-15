@@ -303,14 +303,15 @@ def main() -> None:
         print(f"\n학습 완료. 최고 val_acc={best_val_acc:.3f}, 체크포인트: {ckpt_path}")
         model.load_state_dict(torch.load(ckpt_path, map_location=device))
 
-    os.makedirs(args.out_dir, exist_ok=True)
+    out_dir = os.path.join(args.out_dir, args.model)  # reports/figures/<model>/ — 모델별로 폴더 분리
+    os.makedirs(out_dir, exist_ok=True)
     if history is not None:
-        curves_path = os.path.join(args.out_dir, f"{args.model}_training_curves.png")
+        curves_path = os.path.join(out_dir, "training_curves.png")
         plot_training_curves(history, curves_path)
         print(f"학습 곡선 저장: {curves_path}")
 
     val_matrix = evaluate_confusion(model, val_loader, device)
-    val_cm_path = os.path.join(args.out_dir, f"{args.model}_val_confusion_matrix.png")
+    val_cm_path = os.path.join(out_dir, "val_confusion_matrix.png")
     plot_confusion(val_matrix, f"{args.model} Val Confusion Matrix", val_cm_path)
     print(f"Val confusion matrix 저장: {val_cm_path}")
 
@@ -325,7 +326,7 @@ def main() -> None:
                                   shuffle=False, num_workers=0)
         _, test_acc = run_epoch(model, test_loader, criterion, None, device, train=False)
         test_matrix = evaluate_confusion(model, test_loader, device)
-        test_cm_path = os.path.join(args.out_dir, f"{args.model}_test_confusion_matrix.png")
+        test_cm_path = os.path.join(out_dir, "test_confusion_matrix.png")
         plot_confusion(test_matrix, f"{args.model} Test(실촬영) Confusion Matrix", test_cm_path)
         print(f"Test confusion matrix 저장: {test_cm_path}")
         print(f"\nVal acc={best_val_acc:.3f} -> Test acc={test_acc:.3f} (하락폭 {best_val_acc - test_acc:+.3f})")
