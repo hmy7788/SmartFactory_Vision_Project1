@@ -47,6 +47,19 @@ def list_samples(root: str):
     return samples
 
 
+def precision_recall_f1(matrix):
+    results = {}
+    for i, cls in enumerate(CLASSES):
+        tp = matrix[i, i]
+        fp = matrix[:, i].sum() - tp
+        fn = matrix[i, :].sum() - tp
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+        results[cls] = (precision, recall, f1)
+    return results
+
+
 def plot_confusion(matrix, title: str, out_path: str):
     fig, ax = plt.subplots(figsize=(5.5, 5))
     im = ax.imshow(matrix, cmap="Blues")
@@ -112,6 +125,13 @@ def main() -> None:
                                for j in range(len(CLASSES)) if row[j] > 0)
         acc = cls_correct / cls_total * 100 if cls_total else 0
         print(f"  {cls:14s} {cls_correct}/{cls_total} ({acc:4.1f}%) — {breakdown}")
+
+    prf = precision_recall_f1(matrix)
+    print("\n클래스별 precision/recall/F1")
+    for cls, (p, r, f1) in prf.items():
+        print(f"  {cls:14s} precision={p:.3f} recall={r:.3f} f1={f1:.3f}")
+    macro_f1 = sum(f1 for _, _, f1 in prf.values()) / len(prf)
+    print(f"\nMacro-F1: {macro_f1:.3f}")
 
     out_dir = os.path.join(args.out_dir, "rule_based")
     os.makedirs(out_dir, exist_ok=True)

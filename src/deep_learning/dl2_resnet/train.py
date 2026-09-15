@@ -329,6 +329,12 @@ def main() -> None:
         test_cm_path = os.path.join(out_dir, "test_confusion_matrix.png")
         plot_confusion(test_matrix, f"{args.model} Test(실촬영) Confusion Matrix", test_cm_path)
         print(f"Test confusion matrix 저장: {test_cm_path}")
+        print("\nTest 클래스별 precision/recall/F1")
+        test_prf = precision_recall_f1(test_matrix)
+        for cls, (p, r, f1) in test_prf.items():
+            print(f"  {cls:14s} precision={p:.3f} recall={r:.3f} f1={f1:.3f}")
+        test_macro_f1 = sum(f1 for _, _, f1 in test_prf.values()) / len(test_prf)
+        print(f"Test Macro-F1: {test_macro_f1:.3f}")
         print(f"\nVal acc={best_val_acc:.3f} -> Test acc={test_acc:.3f} (하락폭 {best_val_acc - test_acc:+.3f})")
     else:
         print(f"\n{args.test_root}에 이미지가 없어 domain shift 평가를 건너뜀")

@@ -91,6 +91,24 @@ def predict(mask) -> str:
     return classify_shape(mask)["shape"]
 
 
+def precision_recall_f1(matrix):
+    results = {}
+    for i, cls in enumerate(CLASSES):
+        tp = matrix[i, i]
+        fp = matrix[:, i].sum() - tp
+        fn = matrix[i, :].sum() - tp
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+        results[cls] = (precision, recall, f1)
+    return results
+
+
+def macro_f1_of(matrix) -> float:
+    prf = precision_recall_f1(matrix)
+    return sum(f1 for _, _, f1 in prf.values()) / len(prf)
+
+
 def plot_confusion(matrix, title: str, out_path: str):
     fig, ax = plt.subplots(figsize=(5.5, 5))
     im = ax.imshow(matrix, cmap="Blues")
@@ -162,6 +180,7 @@ def main() -> None:
     print(f"{'':14s} {'제로샷':>10s} {'파인튜닝':>10s}")
     print(f"{'전체 정확도':14s} {zs_correct}/{total} ({zs_correct/total*100:4.1f}%)   "
           f"{ft_correct}/{total} ({ft_correct/total*100:4.1f}%)")
+    print(f"{'Macro-F1':14s} {macro_f1_of(zs_matrix):10.3f}   {macro_f1_of(ft_matrix):10.3f}")
 
     out_dir = os.path.join(args.out_dir, "maskrcnn")  # reports/figures/maskrcnn/ — 모델별로 폴더 분리
     os.makedirs(out_dir, exist_ok=True)

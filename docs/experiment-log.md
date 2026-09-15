@@ -6,14 +6,16 @@
 
 같은 실제 촬영 Test 세트(직접 촬영, 클래스당 10~38장, 클래스: straight/taper_smooth/taper_step/mug)로 전부 재평가한 최신 스냅샷. 아래 표만 보면 지금 가장 나은 파이프라인이 뭔지 바로 알 수 있다 — 아래쪽 트랙별 표는 그 결과에 이르기까지의 실험 과정(시행착오 포함) 기록.
 
-| 순위 | 트랙 | Test 정확도 | 비고 |
-|---|---|---|---|
-| 🥇 1 | **ResNet-18 (`--no-freeze-backbone`)** | **79.8%** (83/104) | 백본까지 fine-tuning, 차등 LR. 전 실험 통틀어 최고. 체크포인트: `checkpoints/resnet18_shape.pth` |
-| 2 | Mask R-CNN (제로샷) | 46.2% (48/104) | COCO 사전학습 그대로, fine-tuning 안 함(`src/deep_learning/dl1_maskrcnn/segment.py`) |
-| 3 | Mask R-CNN (파인튜닝) | 15.4% (16/104) | 룰베이스 pseudo-label로 fine-tuning — **실사용 안 함**, 실패 사례로 기록만 유지 |
-| 4 | 룰베이스 | 11.5% (12/104) | `src/rule_based/`. 거의 전부 mug로 쏠리는 구조적 편향 확인 |
-| - | EfficientNet-B0 | 미착수 | |
-| - | ResNet-50 | 미착수(18 vs 50 비교 아직 안 함) | |
+| 순위 | 트랙 | Test 정확도 | Macro-F1 | 비고 |
+|---|---|---|---|---|
+| 🥇 1 | **ResNet-18 (`--no-freeze-backbone`)** | **79.8%** (83/104) | **0.769** | 백본까지 fine-tuning, 차등 LR. 전 실험 통틀어 최고. 체크포인트: `checkpoints/resnet18_shape.pth` |
+| 2 | Mask R-CNN (제로샷) | 46.2% (48/104) | 0.414 | COCO 사전학습 그대로, fine-tuning 안 함(`src/deep_learning/dl1_maskrcnn/segment.py`) |
+| 3 | Mask R-CNN (파인튜닝) | 15.4% (16/104) | 0.152 | 룰베이스 pseudo-label로 fine-tuning — **실사용 안 함**, 실패 사례로 기록만 유지 |
+| 4 | 룰베이스 | 11.5% (12/104) | 0.104 | `src/rule_based/`. 거의 전부 mug로 쏠리는 구조적 편향 확인 |
+| - | EfficientNet-B0 | 미착수 | - | |
+| - | ResNet-50 | 미착수(18 vs 50 비교 아직 안 함) | - | |
+
+정확도와 macro-F1 순위가 그대로 일치한다는 점이 중요하다 — 즉 룰베이스·Mask R-CNN 파인튜닝의 낮은 정확도가 "머그형에만 몰아서 찍어 숫자만 맞춘" 클래스 불균형 편법이 아니라, **전 클래스에 걸쳐 고르게 성능이 나쁘다**는 뜻(Macro-F1은 표본 수와 무관하게 클래스별 F1을 동일 가중치로 평균내므로). 특히 룰베이스는 mug precision이 0.077로 극히 낮아(recall 0.600은 높지만) "애매하면 mug로 찍는" 편향이 수치로도 그대로 드러난다.
 
 **핵심 교훈**: 이 프로젝트의 제일 큰 domain shift 원인은 **촬영 각도(원근 왜곡)** — 위에서 내려다보고 찍으면 직선이 테이퍼져 보이고 키가 눌려 보여서, 폭 프로파일 같은 **기하학적 규칙에 의존하는 트랙(룰베이스, 그리고 그 규칙을 공유하는 Mask R-CNN)일수록 크게 무너진다.** ResNet처럼 **학습된 시각 패턴**(색상·질감·손잡이 모양·맥락 등)을 쓰는 방식이 이 왜곡에 훨씬 강하다는 게 이번 실험들로 반복 확인됨. Grad-CAM으로 봐도 ResNet은 배경이 아니라 물체 본체·손잡이에 정확히 집중하고 있었다(`reports/figures/resnet18/gradcam.png`).
 
