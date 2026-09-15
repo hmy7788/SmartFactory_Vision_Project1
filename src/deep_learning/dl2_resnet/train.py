@@ -215,11 +215,13 @@ def main() -> None:
     parser.add_argument("--no-freeze-backbone", dest="freeze_backbone", action="store_false")
     parser.add_argument("--out-dir", default="reports/figures")
     parser.add_argument("--checkpoint-dir", default="checkpoints")
+    parser.add_argument("--eval-only", action="store_true",
+                         help="재학습 없이 기존 체크포인트를 불러와 val/test만 재평가한다")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"device: {device}")
-    print(f"model: {args.model}, freeze_backbone={args.freeze_backbone}, epochs={args.epochs}")
+    print(f"model: {args.model}, freeze_backbone={args.freeze_backbone}, eval_only={args.eval_only}")
 
     samples = list_samples(args.data_root)
     print(f"{args.data_root}: 총 {len(samples)}장")
@@ -241,44 +243,62 @@ def main() -> None:
         transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
     ])
 
-    train_loader = DataLoader(ShapeDataset(train_samples, train_tf), batch_size=args.batch_size,
-                               shuffle=True, num_workers=0)
     val_loader = DataLoader(ShapeDataset(val_samples, eval_tf), batch_size=args.batch_size,
                              shuffle=False, num_workers=0)
 
     model = build_model(args.model, args.freeze_backbone).to(device)
     criterion = nn.CrossEntropyLoss()
-    trainable_params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.Adam(trainable_params, lr=args.lr)
 
-    history = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": []}
-    t_start = time.time()
-    best_val_acc = 0.0
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     ckpt_path = os.path.join(args.checkpoint_dir, f"{args.model}_shape.pth")
 
-    for epoch in range(1, args.epochs + 1):
-        train_loss, train_acc = run_epoch(model, train_loader, criterion, optimizer, device, train=True)
-        val_loss, val_acc = run_epoch(model, val_loader, criterion, optimizer, device, train=False)
-        history["train_loss"].append(train_loss)
-        history["train_acc"].append(train_acc)
-        history["val_loss"].append(val_loss)
-        history["val_acc"].append(val_acc)
-        elapsed = time.time() - t_start
-        print(f"epoch {epoch:3d}/{args.epochs}  train_loss={train_loss:.4f} train_acc={train_acc:.3f}  "
-              f"val_loss={val_loss:.4f} val_acc={val_acc:.3f}  ({elapsed:.0f}s 누적)")
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            torch.save(model.state_dict(), ckpt_path)
+    if args.eval_only:
+        if not os.path.isfile(ckpt_path):
+            print(f"체크포인트가 없습니다: {ckpt_path} (먼저 --eval-only 없이 학습해라)")
+            return
+        print(f"체크포인트 로드: {ckpt_path} (재학습 건너뜀)")
+        model.load_state_dict(torch.load(ckpt_path, map_location=device))
+        _, best_val_acc = run_epoch(model, val_loader, criterion, None, device, train=False)
+        print(f"val_acc={best_val_acc:.3f}\n")
+        history = None
+    else:
+        train_loader = DataLoader(ShapeDataset(train_samples, train_tf), batch_size=args.batch_size,
+                                   shuffle=True, num_workers=0)
+        trainable_params = [p for p in model.parameters() if p.requires_grad]
+        optimizer = torch.optim.Adam(trainable_params, lr=args.lr)
 
-    print(f"\n학습 완료. 최고 val_acc={best_val_acc:.3f}, 체크포인트: {ckpt_path}")
+        # 학습 중에는 임시 파일에만 저장한다 — 도중에 죽어도(중단/크래시) 기존
+        # ckpt_path의 "완주한" 체크포인트가 절대 안 망가지도록 함(실제로 한 번
+        # 겪은 사고: 재학습을 중간에 죽였는데 1 epoch째 저장이 먼저 끝나서
+        # 기존 91.3% 체크포인트가 그걸로 덮어써진 적 있음 — docs/troubleshooting.md).
+        tmp_ckpt_path = ckpt_path + ".tmp"
+        history = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": []}
+        t_start = time.time()
+        best_val_acc = 0.0
 
-    model.load_state_dict(torch.load(ckpt_path, map_location=device))
+        for epoch in range(1, args.epochs + 1):
+            train_loss, train_acc = run_epoch(model, train_loader, criterion, optimizer, device, train=True)
+            val_loss, val_acc = run_epoch(model, val_loader, criterion, optimizer, device, train=False)
+            history["train_loss"].append(train_loss)
+            history["train_acc"].append(train_acc)
+            history["val_loss"].append(val_loss)
+            history["val_acc"].append(val_acc)
+            elapsed = time.time() - t_start
+            print(f"epoch {epoch:3d}/{args.epochs}  train_loss={train_loss:.4f} train_acc={train_acc:.3f}  "
+                  f"val_loss={val_loss:.4f} val_acc={val_acc:.3f}  ({elapsed:.0f}s 누적)")
+            if val_acc > best_val_acc:
+                best_val_acc = val_acc
+                torch.save(model.state_dict(), tmp_ckpt_path)
+
+        os.replace(tmp_ckpt_path, ckpt_path)  # 전체 학습이 끝까지 성공했을 때만 최종 반영
+        print(f"\n학습 완료. 최고 val_acc={best_val_acc:.3f}, 체크포인트: {ckpt_path}")
+        model.load_state_dict(torch.load(ckpt_path, map_location=device))
 
     os.makedirs(args.out_dir, exist_ok=True)
-    curves_path = os.path.join(args.out_dir, f"{args.model}_training_curves.png")
-    plot_training_curves(history, curves_path)
-    print(f"학습 곡선 저장: {curves_path}")
+    if history is not None:
+        curves_path = os.path.join(args.out_dir, f"{args.model}_training_curves.png")
+        plot_training_curves(history, curves_path)
+        print(f"학습 곡선 저장: {curves_path}")
 
     val_matrix = evaluate_confusion(model, val_loader, device)
     val_cm_path = os.path.join(args.out_dir, f"{args.model}_val_confusion_matrix.png")
@@ -294,7 +314,7 @@ def main() -> None:
         print(f"\n{args.test_root}: 총 {len(test_samples)}장 - domain shift 평가")
         test_loader = DataLoader(ShapeDataset(test_samples, eval_tf), batch_size=args.batch_size,
                                   shuffle=False, num_workers=0)
-        _, test_acc = run_epoch(model, test_loader, criterion, optimizer, device, train=False)
+        _, test_acc = run_epoch(model, test_loader, criterion, None, device, train=False)
         test_matrix = evaluate_confusion(model, test_loader, device)
         test_cm_path = os.path.join(args.out_dir, f"{args.model}_test_confusion_matrix.png")
         plot_confusion(test_matrix, f"{args.model} Test(실촬영) Confusion Matrix", test_cm_path)
