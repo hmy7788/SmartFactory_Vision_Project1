@@ -24,6 +24,7 @@ MUG_HEIGHT_TO_DIAMETER_MAX = 1.5
 STRAIGHT_BOTTOM_TOP_RATIO_MIN = 0.92
 STEP_JUMP_RATIO_THRESHOLD = 0.29
 HANDLE_DEPTH_RATIO_THRESHOLD = 0.08
+MAX_PROCESSING_DIM = 1200  # 이보다 긴 변을 가진 이미지는 처리 전에 축소한다
 
 SHAPE_LABELS_KO = {
     "mug": "머그형",
@@ -130,7 +131,19 @@ def get_mask(image: np.ndarray, use_grabcut: bool = True) -> np.ndarray:
     않다 — 물체가 사진에 일부만 나오거나(클로즈업 컷) 배경이 복잡한 경우는
     여전히 실패할 수 있으니, 분류 결과가 이상하면 저장된 마스크를 먼저 눈으로
     확인할 것.
+
+    긴 변이 MAX_PROCESSING_DIM을 넘는 이미지는 처리 전에 축소한다 — 폰카메라
+    원본(4000x3000 등)에서 GrabCut이 30초 넘게 걸리는 걸 실측으로 확인함
+    (docs/troubleshooting.md). classify_shape()는 마스크의 절대 픽셀 수가
+    아니라 비율(높이/지름 등)만 쓰므로 축소해도 판정에 영향 없다. 반환되는
+    마스크는 (축소했다면) 축소된 크기를 따른다 — 원본과 크기가 다를 수 있음.
     """
+    h, w = image.shape[:2]
+    longest_side = max(h, w)
+    if longest_side > MAX_PROCESSING_DIM:
+        scale = MAX_PROCESSING_DIM / longest_side
+        image = cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
     rough_otsu = _rough_mask_otsu(image)
     rough_canny = _rough_mask_canny(image)
     rough = cv2.bitwise_or(rough_otsu, rough_canny)

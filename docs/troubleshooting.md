@@ -29,6 +29,15 @@
 
 ## 로그
 
+## [2026-09-15] get_mask()가 폰카메라 원본(4000x3000)에서 장당 35초 소요
+
+- **트랙/영역**: rule_based / shape_classifier.py::get_mask
+- **증상**: `data/test/`(직접 촬영한 진짜 Test 세트, 카카오톡으로 받은 폰카메라 사진)를 전량 평가하려다 노트북이 몇 분째 안 끝남. GPU 사용률 0%라 Mask R-CNN이 아니라 룰베이스 단계에서 멈춘 것으로 확인.
+- **원인**: 테스트 사진이 4000x3000(12MP) — 지금까지 써온 `data/raw2`의 상품 사진(보통 500~1000px)보다 훨씬 큼. `get_mask()`가 이미지를 축소하지 않고 원본 그대로 Otsu/Canny/GrabCut을 돌려서, GrabCut의 픽셀 수 비례 연산량이 그대로 부담됨. 실측: 한 장에 **35초**.
+- **해결**: `get_mask()`에 전처리 단계 추가 — 긴 변이 `MAX_PROCESSING_DIM=1200`을 넘으면 비율 유지하며 축소 후 처리. `classify_shape()`는 마스크의 절대 픽셀 수가 아니라 비율(높이/지름 등)만 쓰므로 축소해도 판정에 영향 없음. 같은 사진 기준 35초 → **2.2초**(16배 개선).
+- **주의**: `get_mask()`가 반환하는 마스크는 (원본이 컸다면) 축소된 크기를 따른다 — 원본 이미지와 크기가 다를 수 있음. `classify_shape()`/`compute_width_profile()`은 비율만 쓰므로 문제없지만, 마스크를 원본에 그대로 오버레이하려는 새 코드를 짤 때는 크기가 다를 수 있다는 점을 고려할 것.
+- **관련 파일**: `src/rule_based/shape_classifier.py` (`get_mask`, `MAX_PROCESSING_DIM`)
+
 ## [2026-09-15] 임계값 재조정 후 합성 테스트 실패 — 원인은 임계값이 아니라 테스트 손잡이 위치
 
 - **트랙/영역**: rule_based / synthetic.py, shape_classifier.py — `test_taper_smooth_with_handle_stays_taper_smooth`
