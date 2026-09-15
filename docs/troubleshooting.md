@@ -29,6 +29,14 @@
 
 ## 로그
 
+## [2026-09-15] taper_step이 get_mask() 몸통 누락으로 mug에 대량 오분류 (n=40 확인)
+
+- **트랙/영역**: rule_based / shape_classifier.py::get_mask, classify_shape
+- **증상**: `data/raw2`에서 taper_step 클래스 무작위 10장 중 6장이 mug로 오분류(`notebooks/rule_based_raw2_sample.ipynb`). 마스크를 보면 몸통 없이 금속 뚜껑/테두리 부분만 하얗게 잡힘.
+- **원인**: `get_mask()`(Otsu+GrabCut)가 매트한 몸통 색과 배경을 구분 못 하고, 대비가 강한 금속 뚜껑/테두리만 전경으로 남기는 경우가 반복됨. 높이가 실제보다 훨씬 작게 측정돼 `height/diameter <= 1.5`(mug 조건)를 만족해버림. 09-14 실험(그림자 융착, 색 충돌)과 원인은 다르지만 결과(몸통 누락 → mug 오분류)는 같은 계열.
+- **해결**: 미해결. 마스크가 몸통까지 정상적으로 잡힌 3장(23.jpg, 49.jpg, 26.jpg)은 전부 정확히 분류됨 — `classify_shape()` 로직 자체는 문제없고, 병목은 100% `get_mask()`의 세그멘테이션 품질. Otsu+GrabCut 같은 색상 기반 방법의 근본 한계로 보이며, Mask R-CNN(dl1) 트랙 도입이 유력한 해결책.
+- **관련 파일**: `src/rule_based/shape_classifier.py`, `notebooks/rule_based_raw2_sample.ipynb`
+
 ## [2026-09-15] Bing/Google 크롤링 결과에 쇼핑몰 "상세페이지" 이미지가 섞임
 
 - **트랙/영역**: data_collection / search_crawler.py
