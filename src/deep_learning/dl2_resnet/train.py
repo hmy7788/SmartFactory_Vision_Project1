@@ -264,8 +264,17 @@ def main() -> None:
     else:
         train_loader = DataLoader(ShapeDataset(train_samples, train_tf), batch_size=args.batch_size,
                                    shuffle=True, num_workers=0)
-        trainable_params = [p for p in model.parameters() if p.requires_grad]
-        optimizer = torch.optim.Adam(trainable_params, lr=args.lr)
+        if args.freeze_backbone:
+            optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad], lr=args.lr)
+        else:
+            # 백본까지 풀면 사전학습된 특징이 초반에 망가지지 않도록 백본은
+            # 훨씬 낮은 LR, 새로 만든 FC layer는 원래 LR을 쓴다(표준 fine-tuning 관행).
+            backbone_params = [p for n, p in model.named_parameters() if not n.startswith("fc.")]
+            fc_params = [p for n, p in model.named_parameters() if n.startswith("fc.")]
+            optimizer = torch.optim.Adam([
+                {"params": backbone_params, "lr": args.lr * 0.1},
+                {"params": fc_params, "lr": args.lr},
+            ])
 
         # 학습 중에는 임시 파일에만 저장한다 — 도중에 죽어도(중단/크래시) 기존
         # ckpt_path의 "완주한" 체크포인트가 절대 안 망가지도록 함(실제로 한 번
