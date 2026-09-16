@@ -1,0 +1,18 @@
+# Local image datasets and generated model artifacts
+img/
+outputs/
+*.pt
+*.pth
+
+# Local Python and CUDA environments
+.venv/
+.cuda_packages/
+.torch/
+.wheels/
+.tmp/
+__pycache__/
+*.py[cod]
+
+# Editor / OS files
+.DS_Store
+Thumbs.db

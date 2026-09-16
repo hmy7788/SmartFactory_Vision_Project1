@@ -1,0 +1,71 @@
+{
+  "crawler_holdout": {
+    "accuracy": 0.9767441860465116,
+    "macro_precision": 0.9793436293436293,
+    "macro_recall": 0.9759031198686372,
+    "macro_f1": 0.9772894453648244,
+    "samples": 129,
+    "per_class": {
+      "mug": {
+        "precision": 0.9459459459459459,
+        "recall": 1.0,
+        "f1": 0.9722222222222222,
+        "support": 35
+      },
+      "straight": {
+        "precision": 0.9714285714285714,
+        "recall": 0.9714285714285714,
+        "f1": 0.9714285714285714,
+        "support": 35
+      },
+      "taper_smooth": {
+        "precision": 1.0,
+        "recall": 0.9666666666666667,
+        "f1": 0.983050847457627,
+        "support": 30
+      },
+      "taper_step": {
+        "precision": 1.0,
+        "recall": 0.9655172413793104,
+        "f1": 0.9824561403508771,
+        "support": 29
+      }
+    }
+  },
+  "real_photos": {
+    "accuracy": 0.8809523809523809,
+    "macro_precision": 0.8909128045157457,
+    "macro_recall": 0.8673513986013986,
+    "macro_f1": 0.8749537878353962,
+    "samples": 126,
+    "per_class": {
+      "mug": {
+        "precision": 0.9411764705882353,
+        "recall": 0.7272727272727273,
+        "f1": 0.8205128205128205,
+        "support": 22
+      },
+      "straight": {
+        "precision": 0.875,
+        "recall": 0.8974358974358975,
+        "f1": 0.8860759493670887,
+        "support": 39
+      },
+      "taper_smooth": {
+        "precision": 0.7777777777777778,
+        "recall": 0.875,
+        "f1": 0.823529411764706,
+        "support": 32
+      },
+      "taper_step": {
+        "precision": 0.9696969696969697,
+        "recall": 0.9696969696969697,
+        "f1": 0.9696969696969697,
+        "support": 33
+      }
+    }
+  },
+  "accuracy_gap_crawler_minus_real": 0.09579180509413066,
+  "macro_f1_gap_crawler_minus_real": 0.10233565752942819,
+  "interpretation": "A positive gap indicates performance loss when moving from crawled images to real photographs. Both sets were evaluated with the same final model."
+}

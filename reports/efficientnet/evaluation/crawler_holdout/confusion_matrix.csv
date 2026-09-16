@@ -1,0 +1,5 @@
+﻿actual\predicted,mug,straight,taper_smooth,taper_step
+mug,35,0,0,0
+straight,1,34,0,0
+taper_smooth,0,1,29,0
+taper_step,1,0,0,28
