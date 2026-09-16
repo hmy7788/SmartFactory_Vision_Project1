@@ -70,7 +70,7 @@ def draw_row(fig_axes, image_rgb, mask, result, true_cls, row_title, filename):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--data-root", default="data/preprocess", help="테스트1(같은 도메인) 소스")
-    parser.add_argument("--test-root", default="data/test1", help="테스트2(직접 촬영) 소스")
+    parser.add_argument("--test-root", default="data/test1_orientation_backup", help="테스트2(직접 촬영) 소스")
     parser.add_argument("--val-split", type=float, default=0.2)
     parser.add_argument("--split-seed", type=int, default=42, help="dl2_resnet/train.py와 동일해야 같은 127장이 재현됨")
     parser.add_argument("--seed", type=int, default=None, help="예시를 뽑는 무작위 시드(생략 시 매번 다르게 뽑힘)")
