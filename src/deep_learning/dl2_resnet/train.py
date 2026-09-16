@@ -354,8 +354,11 @@ def main() -> None:
     print(f"Val confusion matrix 저장: {val_cm_path}")
 
     print("\nVal 클래스별 precision/recall/F1")
-    for cls, (p, r, f1) in precision_recall_f1(val_matrix).items():
+    val_prf = precision_recall_f1(val_matrix)
+    for cls, (p, r, f1) in val_prf.items():
         print(f"  {cls:14s} precision={p:.3f} recall={r:.3f} f1={f1:.3f}")
+    val_macro_f1 = sum(f1 for _, _, f1 in val_prf.values()) / len(val_prf)
+    print(f"Val Macro-F1: {val_macro_f1:.3f}")
 
     test_samples = list_samples(args.test_root)
     if test_samples:
