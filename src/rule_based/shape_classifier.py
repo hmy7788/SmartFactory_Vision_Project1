@@ -161,12 +161,36 @@ def get_mask(image: np.ndarray, use_grabcut: bool = True) -> np.ndarray:
     return cleaned
 
 
+def _row_max_run_width(row: np.ndarray) -> int:
+    """한 행(가로 한 줄)에서 가장 긴 연속 전경 픽셀 구간의 폭을 구한다.
+
+    손잡이가 몸통과 살짝 떨어져 있어(구멍 사이로 배경이 보이는 D자형 등) 같은
+    행에 몸통·손잡이 두 덩어리가 따로 찍히는 경우, 이전 방식(min-max 전체 폭)은
+    손잡이 바깥쪽 끝~몸통 반대쪽 끝까지를 폭으로 오인식했다 — 실측으로 확인:
+    손잡이 달린 taper_step 사진에서 폭 프로파일이 전 구간 거의 동일한 값으로
+    나와 height/diameter가 mug 임계값 밑으로 뭉개짐(2026-09-16, docs/troubleshooting.md).
+    가장 긴 연속 구간만 쓰면 배경으로 끊긴 손잡이 쪽은 자동으로 제외된다.
+    손잡이가 몸통에 맞닿아 있는 경우(합성 테스트 등)는 어차피 하나의 연속
+    구간으로 합쳐지므로 이전 방식과 동일하게 동작한다 — "실루엣이 손잡이보다
+    우선" 원칙은 그대로 유지됨.
+    """
+    idx = np.flatnonzero(row)
+    if idx.size == 0:
+        return 0
+    gaps = np.flatnonzero(np.diff(idx) > 1)
+    starts = np.concatenate(([0], gaps + 1))
+    ends = np.concatenate((gaps, [idx.size - 1]))
+    return int((idx[ends] - idx[starts] + 1).max())
+
+
 def compute_width_profile(mask: np.ndarray, n_bins: int = 10) -> np.ndarray:
     """마스크를 세로로 n_bins등분해 구간별 폭을 반환한다.
 
-    index 0 = 몸통 위쪽(입구) 방향, index -1 = 아래쪽(바닥) 방향.
+    index 0 = 몸통 위쪽(입구) 방향, index -1 = 아래쪽(바닥) 방향. 구간 폭은 그
+    구간에 속한 행들의 "가장 긴 연속 전경 픽셀 구간" 폭의 중앙값이다(전체
+    min-max 스팬이 아님) — 이유는 _row_max_run_width 참고.
     """
-    ys, xs = np.nonzero(mask)
+    ys, _ = np.nonzero(mask)
     if ys.size == 0:
         raise ValueError("mask에 전경 픽셀이 없습니다")
 
@@ -174,11 +198,9 @@ def compute_width_profile(mask: np.ndarray, n_bins: int = 10) -> np.ndarray:
     edges = np.linspace(y_min, y_max + 1, n_bins + 1)
     widths = np.zeros(n_bins, dtype=np.float64)
     for i in range(n_bins):
-        band = (ys >= edges[i]) & (ys < edges[i + 1])
-        if not np.any(band):
-            continue
-        band_xs = xs[band]
-        widths[i] = float(band_xs.max() - band_xs.min() + 1)
+        y_start, y_end = int(edges[i]), int(edges[i + 1])
+        row_widths = [_row_max_run_width(mask[y]) for y in range(y_start, y_end) if mask[y].any()]
+        widths[i] = float(np.median(row_widths)) if row_widths else 0.0
     return widths
 
 

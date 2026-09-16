@@ -4,7 +4,7 @@
 confusion matrix를 reports/figures/rule_based/에 저장한다.
 
 실행:
-    python src/rule_based/evaluate_test.py --test-root data/test
+    python src/rule_based/evaluate_test.py --test-root data/test1
 """
 
 import argparse
@@ -104,7 +104,7 @@ def main() -> None:
             matrix[cls_to_idx[cls], cls_to_idx[pred]] += 1
         correct += int(pred == cls)
 
-        if i % 10 == 0 or i == len(samples):
+        if i % 1 == 0 or i == len(samples):  # 장당 처리 시간이 길어서(GrabCut) 매 장 출력
             elapsed = time.time() - t_start
             rate = i / elapsed if elapsed > 0 else 0
             eta = (len(samples) - i) / rate if rate > 0 else 0
