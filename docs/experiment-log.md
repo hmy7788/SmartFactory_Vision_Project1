@@ -8,12 +8,15 @@
 
 | 순위 | 트랙 | Test 정확도 | Macro-F1 | 비고 |
 |---|---|---|---|---|
-| 🥇 1 | **ResNet-50 (`--no-freeze-backbone`)** | 81.0% (128/158) | **0.809** | ResNet-18과 정확도는 동일하지만 Macro-F1 근소 우위. 다만 Val→Test 하락폭(18.2%p)이 18보다 커서 더 과적합하는 경향 — 굳이 50을 쓸 이유는 약함(아래 표 참고). 체크포인트: `checkpoints/resnet50_shape.pth` |
-| 2 | ResNet-18 (`--no-freeze-backbone`) | **81.0%** (128/158) | 0.803 | 백본까지 fine-tuning, 차등 LR. Val→Test 하락폭 15.8%p로 50보다 안정적 — **실사용은 이쪽을 권장**. 체크포인트: `checkpoints/resnet18_shape.pth` |
-| 3 | Mask R-CNN (제로샷) | 43.7% (69/158) | 0.466 | COCO 사전학습 그대로, fine-tuning 안 함(`src/deep_learning/dl1_maskrcnn/segment.py`) |
-| 4 | Mask R-CNN (파인튜닝) | 36.7% (58/158) | 0.351 | 룰베이스 pseudo-label로 fine-tuning — **실사용 안 함**, 실패 사례로 기록만 유지 |
-| 5 | 룰베이스 | 18.4% (29/158) | 0.139 | `src/rule_based/`. 폭 계산을 손잡이-몸통 분리 방식으로 개선(9/16)했지만 여전히 대부분 mug로 쏠림 — segmentation 단계까지 손댄 추가 시도는 오히려 하락해서 롤백(9/16, 아래 표 참고) |
+| 🥇 1 | **ResNet-18 + TTA** (`--no-freeze-backbone --tta`) | **81.6%** (129/158) | **0.813** | 스케일 3종x좌우반전 6-view 평균, 재학습 없이 기존 체크포인트로 추론만 바꾼 것. 체크포인트: `checkpoints/resnet18_shape.pth` |
+| 2 | ResNet-50 (`--no-freeze-backbone`) | 81.0% (128/158) | 0.809 | TTA 미적용 기준. Val→Test 하락폭(18.2%p)이 18보다 커서 더 과적합하는 경향 — 굳이 50을 쓸 이유는 약함(아래 표 참고) |
+| 3 | ResNet-18 (`--no-freeze-backbone`, TTA 없이) | 81.0% (128/158) | 0.803 | 백본까지 fine-tuning, 차등 LR. Val→Test 하락폭 15.8%p로 50보다 안정적. **TTA 켜면 1위로 올라감(위 항목)** |
+| 4 | Mask R-CNN (제로샷) | 43.7% (69/158) | 0.466 | COCO 사전학습 그대로, fine-tuning 안 함(`src/deep_learning/dl1_maskrcnn/segment.py`) |
+| 5 | Mask R-CNN (파인튜닝) | 36.7% (58/158) | 0.351 | 룰베이스 pseudo-label로 fine-tuning — **실사용 안 함**, 실패 사례로 기록만 유지 |
+| 6 | 룰베이스 | 18.4% (29/158) | 0.139 | `src/rule_based/`. 폭 계산을 손잡이-몸통 분리 방식으로 개선(9/16)했지만 여전히 대부분 mug로 쏠림 — segmentation 단계까지 손댄 추가 시도는 오히려 하락해서 롤백(9/16, 아래 표 참고) |
 | - | EfficientNet-B0 | 미착수 | - | |
+
+참고: ResNet-50에는 아직 TTA를 안 붙여봤음 — 50에도 붙이면 순위가 다시 바뀔 수 있음(미착수).
 
 정확도와 macro-F1 순위가 대체로 일치한다는 점이 중요하다 — 즉 룰베이스·Mask R-CNN 파인튜닝의 낮은 정확도가 "머그형에만 몰아서 찍어 숫자만 맞춘" 클래스 불균형 편법이 아니라, **전 클래스에 걸쳐 고르게 성능이 나쁘다**는 뜻(Macro-F1은 표본 수와 무관하게 클래스별 F1을 동일 가중치로 평균내므로). 룰베이스는 여전히 mug precision이 극히 낮은 채(대부분 오답이 mug로 쏠림) recall만 높은 구조적 편향을 보인다. ResNet-18 vs 50은 **정확도로는 우열이 안 갈리고 Val→Test 하락폭(과적합 정도)으로만 갈린다** — 파라미터를 늘린다고 이 데이터 규모(train 515장)에서 더 나아지지 않는다는 것도 이번 비교의 중요한 결론.
 
