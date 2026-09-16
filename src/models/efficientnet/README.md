@@ -37,7 +37,7 @@ GPU가 있으면 자동으로 CUDA를 사용합니다. GPU 메모리가 부족�
 ## 3. 두 테스트셋 평가와 Grad-CAM
 
 ```powershell
-python src/models/efficientnet/evaluate.py --cam-per-class 3
+python src/models/efficientnet/evaluate.py --cam-per-class 4
 ```
 
 평가 결과는 `outputs/evaluation`에 저장됩니다.

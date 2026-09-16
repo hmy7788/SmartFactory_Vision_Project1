@@ -76,6 +76,11 @@ upright 상태로 평가하도록 `ImageOps.exif_transpose`를 적용했다. EXI
 | 13 | 0.0206 | 99.42% |
 | 15 | 0.0254 | **99.22%** |
 
+![Epoch별 학습 loss와 accuracy](training_curves.svg)
+
+위 그래프는 **학습 데이터의 지표만** 나타낸다. 별도 validation set을 사용하지 않았으므로
+validation 곡선은 없으며, 테스트 성능은 아래 두 평가 섹션에서 별도로 확인해야 한다.
+
 학습 정확도와 크롤링 holdout 정확도의 차이는 약 1.55%p로 작다. 반면 실촬영과의 차이는
 11.12%p이므로, 단순한 train overfitting보다는 크롤링 이미지와 실촬영 이미지 사이의
 도메인 차이가 주요 성능 저하 요인으로 보인다.
@@ -119,6 +124,18 @@ recall이 가장 낮다. `taper_step`의 단차는 비교적 강한 구분 특�
 
 Grad-CAM의 붉고 노란 영역은 해당 예측에 상대적으로 크게 기여한 위치다.
 
+### 실촬영 데이터: 클래스별 4×4 예시
+
+행은 **실제 클래스**, 열은 해당 클래스의 이미지 예시다. 각 셀의 괄호 안은 모델의
+예측 클래스이며, 오분류도 포함했다. 동일한 평가 전처리와 최종 모델을 사용해 생성했다.
+
+| 실제 클래스 | 예시 1 | 예시 2 | 예시 3 | 예시 4 |
+|---|---|---|---|---|
+| **mug** | <img src="evaluation/gradcam/real_photos/01_actual-mug_pred-taper_smooth_conf-0.792.jpg" width="145" alt="mug 예시 1, taper_smooth로 오분류"> <br>taper_smooth | <img src="evaluation/gradcam/real_photos/02_actual-mug_pred-mug_conf-0.999.jpg" width="145" alt="mug 예시 2, 정분류"> <br>mug | <img src="evaluation/gradcam/real_photos/03_actual-mug_pred-taper_smooth_conf-0.823.jpg" width="145" alt="mug 예시 3, taper_smooth로 오분류"> <br>taper_smooth | <img src="evaluation/gradcam/real_photos/04_actual-mug_pred-taper_step_conf-0.850.jpg" width="145" alt="mug 예시 4, taper_step으로 오분류"> <br>taper_step |
+| **straight** | <img src="evaluation/gradcam/real_photos/05_actual-straight_pred-straight_conf-0.999.jpg" width="145" alt="straight 예시 1, 정분류"> <br>straight | <img src="evaluation/gradcam/real_photos/06_actual-straight_pred-straight_conf-0.946.jpg" width="145" alt="straight 예시 2, 정분류"> <br>straight | <img src="evaluation/gradcam/real_photos/07_actual-straight_pred-straight_conf-0.976.jpg" width="145" alt="straight 예시 3, 정분류"> <br>straight | <img src="evaluation/gradcam/real_photos/08_actual-straight_pred-straight_conf-0.991.jpg" width="145" alt="straight 예시 4, 정분류"> <br>straight |
+| **taper_smooth** | <img src="evaluation/gradcam/real_photos/09_actual-taper_smooth_pred-taper_smooth_conf-0.993.jpg" width="145" alt="taper_smooth 예시 1, 정분류"> <br>taper_smooth | <img src="evaluation/gradcam/real_photos/10_actual-taper_smooth_pred-taper_smooth_conf-0.973.jpg" width="145" alt="taper_smooth 예시 2, 정분류"> <br>taper_smooth | <img src="evaluation/gradcam/real_photos/11_actual-taper_smooth_pred-mug_conf-0.756.jpg" width="145" alt="taper_smooth 예시 3, mug로 오분류"> <br>mug | <img src="evaluation/gradcam/real_photos/12_actual-taper_smooth_pred-taper_smooth_conf-0.899.jpg" width="145" alt="taper_smooth 예시 4, 정분류"> <br>taper_smooth |
+| **taper_step** | <img src="evaluation/gradcam/real_photos/13_actual-taper_step_pred-taper_step_conf-0.959.jpg" width="145" alt="taper_step 예시 1, 정분류"> <br>taper_step | <img src="evaluation/gradcam/real_photos/14_actual-taper_step_pred-taper_step_conf-0.586.jpg" width="145" alt="taper_step 예시 2, 정분류"> <br>taper_step | <img src="evaluation/gradcam/real_photos/15_actual-taper_step_pred-taper_step_conf-0.894.jpg" width="145" alt="taper_step 예시 3, 정분류"> <br>taper_step | <img src="evaluation/gradcam/real_photos/16_actual-taper_step_pred-taper_step_conf-0.988.jpg" width="145" alt="taper_step 예시 4, 정분류"> <br>taper_step |
+
 ### 실촬영 대표 사례
 
 | 사례 | 해석 |
@@ -134,15 +151,15 @@ Grad-CAM의 붉고 노란 영역은 해당 예측에 상대적으로 크게 기�
 
 #### Straight 정답 (confidence 0.999)
 
-![straight Grad-CAM](evaluation/gradcam/real_photos/04_actual-straight_pred-straight_conf-0.999.jpg)
+![straight Grad-CAM](evaluation/gradcam/real_photos/05_actual-straight_pred-straight_conf-0.999.jpg)
 
 #### Taper smooth 정답 (confidence 0.993)
 
-![taper smooth Grad-CAM](evaluation/gradcam/real_photos/07_actual-taper_smooth_pred-taper_smooth_conf-0.993.jpg)
+![taper smooth Grad-CAM](evaluation/gradcam/real_photos/09_actual-taper_smooth_pred-taper_smooth_conf-0.993.jpg)
 
 #### Taper step 정답 (confidence 0.959)
 
-![taper step Grad-CAM](evaluation/gradcam/real_photos/10_actual-taper_step_pred-taper_step_conf-0.959.jpg)
+![taper step Grad-CAM](evaluation/gradcam/real_photos/13_actual-taper_step_pred-taper_step_conf-0.959.jpg)
 
 전체적으로 CAM은 배경보다 제품 본체에 놓여 있어 모델이 단순 배경색만 학습한 것으로
 보이지는 않는다. 다만 중앙부와 상단부에 집중하는 경향이 강하고, 일부 `mug`에서 하단
@@ -164,7 +181,7 @@ Grad-CAM은 인과적 설명이 아니라 국소적인 기여도 시각화이므
 ## 8. 산출물
 
 - 모델 체크포인트: `outputs/efficientnet_b0_final.pt` (약 16MB; 이 브랜치에는 포함하지 않음. 데이터와 함께 학습 코드를 재실행하면 생성됨)
-- 학습 기록: [`training_history.json`](training_history.json)
+- 학습 기록: [`training_history.json`](training_history.json), [epoch별 그래프](training_curves.svg)
 - 전체 비교 지표: [`evaluation/comparison.json`](evaluation/comparison.json)
 - 크롤링 이미지별 예측: [`evaluation/crawler_holdout/predictions.csv`](evaluation/crawler_holdout/predictions.csv)
 - 실촬영 이미지별 예측: [`evaluation/real_photos/predictions.csv`](evaluation/real_photos/predictions.csv)
