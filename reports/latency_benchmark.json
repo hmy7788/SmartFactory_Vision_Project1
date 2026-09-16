@@ -1,0 +1,12 @@
+{
+  "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "pure_gpu_forward_ms": 39.17647499969462,
+  "pure_gpu_fps": 25.5255226512287,
+  "web_e2e_ms": 58.86080599913839,
+  "web_prep_ms": 18.2697539991932,
+  "web_fps": 16.989233888755074,
+  "real_4000x3000_e2e_ms": 795.3941733338676,
+  "real_4000x3000_prep_ms": 744.406016668169,
+  "real_fps": 1.2572382769772301,
+  "nukki_grabcut_ms": 3745.405220001703
+}

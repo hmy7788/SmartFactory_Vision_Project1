@@ -1,0 +1,10 @@
+/.venv/
+__pycache__/
+*.pyc
+/.pytest_cache/
+/data/ssg_tumbler/
+/data/naver_tumbler/
+/reports/crawler_check/
+/data/test1_orientation_backup/
+/checkpoints/*
+!/checkpoints/exp_b_seed43_best.pt

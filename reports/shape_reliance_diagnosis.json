@@ -1,0 +1,18 @@
+{
+  "original": {
+    "accuracy": 0.9663,
+    "mean_target_prob": 0.9433
+  },
+  "grayscale": {
+    "accuracy": 0.9663,
+    "mean_target_prob": 0.939
+  },
+  "logo_masked": {
+    "accuracy": 0.9438,
+    "mean_target_prob": 0.9303
+  },
+  "bg_masked": {
+    "accuracy": 0.9326,
+    "mean_target_prob": 0.8878
+  }
+}

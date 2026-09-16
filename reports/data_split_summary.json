@@ -1,0 +1,38 @@
+{
+  "straight": {
+    "total_images": 126,
+    "train_images": 101,
+    "val_images": 25,
+    "val_actual_ratio": 0.198,
+    "total_groups": 77,
+    "train_groups": 57,
+    "val_groups": 20
+  },
+  "taper_smooth": {
+    "total_images": 99,
+    "train_images": 79,
+    "val_images": 20,
+    "val_actual_ratio": 0.202,
+    "total_groups": 92,
+    "train_groups": 74,
+    "val_groups": 18
+  },
+  "taper_step": {
+    "total_images": 108,
+    "train_images": 86,
+    "val_images": 22,
+    "val_actual_ratio": 0.204,
+    "total_groups": 94,
+    "train_groups": 75,
+    "val_groups": 19
+  },
+  "mug": {
+    "total_images": 108,
+    "train_images": 86,
+    "val_images": 22,
+    "val_actual_ratio": 0.204,
+    "total_groups": 105,
+    "train_groups": 83,
+    "val_groups": 22
+  }
+}
