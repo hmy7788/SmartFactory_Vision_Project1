@@ -37,6 +37,7 @@ import torch.nn as nn
 from PIL import Image, ImageOps
 from torch.utils.data import DataLoader, Dataset
 from torchvision import models, transforms
+from torchvision.transforms import functional as TF
 
 plt.rcParams["font.family"] = "Malgun Gothic"
 plt.rcParams["axes.unicode_minus"] = False
@@ -148,6 +149,41 @@ def evaluate_confusion(model, loader, device):
     return matrix
 
 
+def build_tta_transforms():
+    """여러 스케일(리사이즈 크기)로 224 center-crop을 만든다 — eval_tf(256->224)를 중심으로
+    한 단계 넓게/좁게 잡아 물체가 프레임에서 살짝 다르게 잡혀도 견고하게 만든다."""
+    return [
+        transforms.Compose([
+            transforms.Resize(resize_to),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+        ])
+        for resize_to in (232, 256, 280)
+    ]
+
+
+def evaluate_tta(model, samples, device):
+    """스케일 3종 x (원본+좌우반전) = 6개 뷰의 softmax를 평균해서 예측한다(재학습 불필요).
+
+    accuracy/precision_recall_f1은 다른 평가 경로와 동일한 confusion matrix를
+    받으므로 그대로 재사용 가능.
+    """
+    model.eval()
+    variants = build_tta_transforms()
+    matrix = np.zeros((len(CLASSES), len(CLASSES)), dtype=int)
+    with torch.no_grad():
+        for path, label in samples:
+            image = exif_safe_loader(path)
+            flipped = TF.hflip(image)
+            views = torch.stack([tf(im) for tf in variants for im in (image, flipped)]).to(device)
+            probs = model(views).softmax(dim=1).mean(dim=0)
+            pred = int(probs.argmax().item())
+            matrix[label, pred] += 1
+    correct = int(np.trace(matrix))
+    return matrix, correct / len(samples)
+
+
 def plot_training_curves(history, out_path: str):
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
     epochs = range(1, len(history["train_loss"]) + 1)
@@ -217,6 +253,8 @@ def main() -> None:
     parser.add_argument("--checkpoint-dir", default="checkpoints")
     parser.add_argument("--eval-only", action="store_true",
                          help="재학습 없이 기존 체크포인트를 불러와 val/test만 재평가한다")
+    parser.add_argument("--tta", action="store_true",
+                         help="Test 평가에 Test-Time Augmentation(스케일 3종 x 좌우반전) 적용 — 재학습 없이 시도해보는 정확도 개선")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -321,11 +359,15 @@ def main() -> None:
 
     test_samples = list_samples(args.test_root)
     if test_samples:
-        print(f"\n{args.test_root}: 총 {len(test_samples)}장 - domain shift 평가")
-        test_loader = DataLoader(ShapeDataset(test_samples, eval_tf), batch_size=args.batch_size,
-                                  shuffle=False, num_workers=0)
-        _, test_acc = run_epoch(model, test_loader, criterion, None, device, train=False)
-        test_matrix = evaluate_confusion(model, test_loader, device)
+        tta_note = " (TTA 적용)" if args.tta else ""
+        print(f"\n{args.test_root}: 총 {len(test_samples)}장 - domain shift 평가{tta_note}")
+        if args.tta:
+            test_matrix, test_acc = evaluate_tta(model, test_samples, device)
+        else:
+            test_loader = DataLoader(ShapeDataset(test_samples, eval_tf), batch_size=args.batch_size,
+                                      shuffle=False, num_workers=0)
+            _, test_acc = run_epoch(model, test_loader, criterion, None, device, train=False)
+            test_matrix = evaluate_confusion(model, test_loader, device)
         test_cm_path = os.path.join(out_dir, "test_confusion_matrix.png")
         plot_confusion(test_matrix, f"{args.model} Test(실촬영) Confusion Matrix", test_cm_path)
         print(f"Test confusion matrix 저장: {test_cm_path}")
