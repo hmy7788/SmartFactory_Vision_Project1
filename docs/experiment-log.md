@@ -60,6 +60,8 @@
 | 2026-09-16 | Claude | 사용자가 직접 검수한 `data/test1`(158장, straight/taper_smooth/taper_step/mug 각 50/41/40/27장)로 기존 체크포인트(`--eval-only`) 재평가 | 96.9%(동일 체크포인트) | **81.0%(128/158)**, Macro-F1 0.803 | `data/test`(104장) 기준(79.8%, Macro-F1 0.769)보다 소폭 개선. 클래스별: straight 86.0%, taper_smooth 61.0%(4트랙 중 가장 약한 클래스로 재확인), taper_step 97.5%, mug 77.8%. 재학습 없이 큐레이션된 평가셋으로만 재확인한 결과라 체크포인트/트렌드는 기존과 동일 |
 | 2026-09-15 | Claude | Grad-CAM으로 판단 근거 시각화 — `src/deep_learning/dl2_resnet/gradcam.py`(`layer4` 활성화·그래디언트 기반), data/test에서 클래스당 4장씩 원본+히트맵 그리드 저장 | - | - | 정성 분석(정확도 지표 아님). **배경이 아니라 물체 본체·손잡이에 정확히 집중** — 배경을 몰래 학습한 징후 없음. taper_step·mug 둘 다 손잡이 영역에 강하게 반응(둘 다 손잡이 있는 디자인이 많아 학습된 유효한 단서로 보임). 오분류 사례에서 원인 짐작 가능: straight가 mug로 오분류된 건(0.96 확신) 주목 영역이 몸통 중간 가로 띠에만 집중돼 전체 높이 비율을 못 본 것으로 보임 — 확신도 자체가 낮았던 오분류(taper_smooth→straight, 0.61)는 모델도 헷갈렸다는 신호로 해석 가능(주의가 입구·아래쪽 두 군데로 분산). 그래프: `reports/figures/resnet18/gradcam.png` |
 
+| 2026-09-16 | Claude | ResNet-50(`--no-freeze-backbone`, ResNet-18과 동일 설정)으로 18 vs 50 첫 비교. `data/test1`(158장)로 평가 | **99.2%**(best epoch 6/11) | **81.0%(128/158)**, Macro-F1 **0.809** | ResNet-18(data/test1 기준 81.0%/0.803)과 **정확도는 동일**, Macro-F1은 근소 우위(0.809 vs 0.803). 다만 Val→Test 하락폭이 18.2%p로 ResNet-18(15.8%p)보다 큼 — Val 99.2%까지 거의 완벽히 맞춰서(train_acc도 98~99%대) 오히려 이 작은 데이터(515장)에 더 과적합했다는 신호로 보임. 클래스별: straight 80.0%, taper_smooth 58.5%(4트랙 공통으로 taper_smooth가 계속 가장 약함), taper_step 100%, mug 88.9%. **결론**: 이 데이터 규모에서는 50이 18 대비 뚜렷한 우위가 없음 — 파라미터 수만 늘려서 얻는 이득이 과적합 위험과 상쇄되는 것으로 보임, 굳이 50을 쓸 이유 약함 |
+
 ## EfficientNet-B0 (`src/deep_learning/efficientnet/`)
 
 | 날짜 | 담당자 | 변경 사항 | Val 정확도 | Test 정확도 | 비고 |
