@@ -7,7 +7,8 @@
 헷갈렸는지가 더 흥미로움).
 
 실행:
-    python src/deep_learning/dl2_resnet/gradcam.py --per-class 4
+    python src/deep_learning/dl2_resnet/gradcam.py --split test2 --per-class 4   # 직접 촬영(기본값)
+    python src/deep_learning/dl2_resnet/gradcam.py --split test1 --per-class 4   # 같은 도메인 Val
 """
 
 import argparse
@@ -32,6 +33,7 @@ from train import (  # noqa: E402
     build_model,
     exif_safe_loader,
     list_samples,
+    stratified_split,
 )
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "rule_based"))
@@ -97,11 +99,16 @@ def preprocess(image_rgb: np.ndarray, device: str):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--test-root", default="data/test")
+    parser.add_argument("--split", choices=["test1", "test2"], default="test2",
+                         help="test1=같은 도메인 분할(data/preprocess의 Val), test2=직접 촬영(--test-root)")
+    parser.add_argument("--test-root", default="data/test1", help="--split test2일 때만 사용")
+    parser.add_argument("--data-root", default="data/preprocess", help="--split test1일 때만 사용 — train.py와 동일해야 같은 Val이 재현됨")
+    parser.add_argument("--val-split", type=float, default=0.2)
+    parser.add_argument("--split-seed", type=int, default=42, help="train.py의 --seed와 동일해야 같은 Val 분할이 재현됨")
     parser.add_argument("--model", choices=["resnet18", "resnet50"], default="resnet18")
     parser.add_argument("--checkpoint", default=None, help="생략 시 checkpoints/<model>_shape.pth")
     parser.add_argument("--per-class", type=int, default=4)
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=0, help="그리드에 표시할 샘플을 고르는 셔플 시드")
     parser.add_argument("--out-dir", default="reports/figures")
     args = parser.parse_args()
 
@@ -117,7 +124,14 @@ def main() -> None:
     target_layer = model.layer4[-1]  # 마지막 conv 블록 — 공간 정보가 남아있는 마지막 지점
     cam_engine = GradCAM(model, target_layer)
 
-    samples = list_samples(args.test_root)  # list_samples는 (path, 정수 라벨)을 반환함
+    if args.split == "test1":
+        all_samples = list_samples(args.data_root)
+        _, samples = stratified_split(all_samples, args.val_split, args.split_seed)
+        print(f"테스트1(같은 도메인 Val): {args.data_root} 중 {len(samples)}장 (val-split={args.val_split}, seed={args.split_seed})")
+    else:
+        samples = list_samples(args.test_root)
+        print(f"테스트2(직접 촬영): {args.test_root} 중 {len(samples)}장")
+    # samples는 (path, 정수 라벨) 리스트
     by_class = {c: [p for p, label_idx in samples if CLASSES[label_idx] == c] for c in CLASSES}
     random.seed(args.seed)
     for c in CLASSES:
@@ -152,7 +166,8 @@ def main() -> None:
     plt.tight_layout()
     out_dir = os.path.join(args.out_dir, args.model)  # reports/figures/<model>/ — 모델별로 폴더 분리
     os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, "gradcam.png")
+    out_name = "gradcam_test1_val.png" if args.split == "test1" else "gradcam_test2.png"
+    out_path = os.path.join(out_dir, out_name)
     fig.savefig(out_path, dpi=120)
     plt.close(fig)
     print(f"\nGrad-CAM 그리드 저장: {out_path}")
