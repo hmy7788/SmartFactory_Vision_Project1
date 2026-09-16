@@ -204,7 +204,7 @@ def precision_recall_f1(matrix):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--data-root", default="data/preprocess")
-    parser.add_argument("--test-root", default="data/test")
+    parser.add_argument("--test-root", default="data/test1")
     parser.add_argument("--model", choices=["resnet18", "resnet50"], default="resnet18")
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=32)
