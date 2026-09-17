@@ -79,6 +79,9 @@ def main() -> None:
     parser.add_argument("--raw2-root", default="data/raw2")
     parser.add_argument("--report", default="data/preprocess/label_quality_report.md")
     parser.add_argument("--seed", type=int, default=None, help="생략 시 매번 다른 조합이 뽑힘")
+    parser.add_argument("--reroll", choices=SIGNAL_TYPES, action="append", default=[],
+                         help="이 유형만 --seed와 별개로 재추첨(다른 유형은 --seed로 뽑은 그대로 유지). 여러 번 지정 가능")
+    parser.add_argument("--reroll-seed", type=int, default=None, help="--reroll 항목을 뽑을 시드(생략 시 매번 다르게 뽑힘)")
     parser.add_argument("--out", default="reports/figures/data_pipeline/label_signal_types_examples.png")
     args = parser.parse_args()
 
@@ -89,8 +92,19 @@ def main() -> None:
         print("일부 신호 유형에 후보가 없습니다 — report 경로를 확인하세요.")
         return
 
+    # 항상 SIGNAL_TYPES 순서대로 rng.choice()를 호출해 상태를 소비한다 — --reroll로
+    # 지정된 유형이라도 이 호출 자체는 건너뛰지 않아야, 재추첨 대상이 아닌 뒤 순서
+    # 유형(예: 문제 없음)이 같은 --seed에서 이전과 동일하게 뽑힌다.
     rng = random.Random(args.seed)
-    picks = {s: rng.choice(by_signal[s]) for s in SIGNAL_TYPES}
+    picks = {}
+    for s in SIGNAL_TYPES:
+        picks[s] = rng.choice(by_signal[s])
+
+    if args.reroll:
+        reroll_rng = random.Random(args.reroll_seed)
+        for s in args.reroll:
+            picks[s] = reroll_rng.choice(by_signal[s])
+            print(f"[재추첨] {s} -> 별도 시드로 다시 뽑음")
 
     print("\nMask R-CNN 모델 로드 중...")
     mrcnn_model, device = load_model()
