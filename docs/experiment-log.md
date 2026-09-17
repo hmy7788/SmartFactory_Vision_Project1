@@ -73,6 +73,7 @@
 | 2026-09-16 | Claude | **"테스트1/테스트2" 프레이밍 정리**(발표자료용) — 테스트1 = 같은 도메인 분할(`data/preprocess`의 Val, 크롤링 이미지 내 15~20% 홀드아웃), 테스트2 = 직접 촬영(`data/test1`, TTA 적용). `train.py`에 Val Macro-F1 출력도 추가(Test 쪽에만 있던 걸 통일) | **테스트1: 96.9%, Macro-F1 0.968** | **테스트2: 82.3%(130/158), Macro-F1 0.818** | 하락폭 14.6%p가 이 프로젝트가 검증하려는 domain shift 강건성 그 자체 — "모델이 원래 잘하는지"가 아니라 "크롤링 데이터로 배운 게 실사용 환경에도 통하는지"를 테스트1 vs 테스트2 격차로 한눈에 보여줄 수 있음 |
 | 2026-09-16 | Claude | ResNet-18에 Test-Time Augmentation 추가(`--tta`, `train.py`) — 스케일 3종(리사이즈 232/256/280, 각 224 center-crop) x 좌우반전 = 6개 뷰의 softmax를 평균. 재학습 없이 기존 체크포인트로 `data/test1` 재평가 | 96.9%(동일 체크포인트) | 81.0%->**81.6%(129/158)**, Macro-F1 0.803->**0.813** | 재학습 없이 공짜로 얻은 개선. 클래스별: straight 82.0%(86.0%에서 소폭 하락), taper_smooth 65.9%(61.0%에서 개선, 4트랙 공통 최약체 클래스가 그나마 나아짐), taper_step 97.5%(동일), mug 81.5%(77.8%에서 개선). trade-off 있지만(straight 소폭 하락) 전체는 순개선 — `--eval-only --tta`로 재현 가능, 비용이 추론 시간 6배뿐이라 실사용에도 적용할 만함 |
 | 2026-09-16 | Claude | ResNet-50(`--no-freeze-backbone`, ResNet-18과 동일 설정)으로 18 vs 50 첫 비교. `data/test1`(158장)로 평가 | **99.2%**(best epoch 6/11) | **81.0%(128/158)**, Macro-F1 **0.809** | ResNet-18(data/test1 기준 81.0%/0.803)과 **정확도는 동일**, Macro-F1은 근소 우위(0.809 vs 0.803). 다만 Val→Test 하락폭이 18.2%p로 ResNet-18(15.8%p)보다 큼 — Val 99.2%까지 거의 완벽히 맞춰서(train_acc도 98~99%대) 오히려 이 작은 데이터(515장)에 더 과적합했다는 신호로 보임. 클래스별: straight 80.0%, taper_smooth 58.5%(4트랙 공통으로 taper_smooth가 계속 가장 약함), taper_step 100%, mug 88.9%. **결론**: 이 데이터 규모에서는 50이 18 대비 뚜렷한 우위가 없음 — 파라미터 수만 늘려서 얻는 이득이 과적합 위험과 상쇄되는 것으로 보임, 굳이 50을 쓸 이유 약함 |
+| 2026-09-17 | Claude | ResNet-18에 class-weighted loss 추가(`--class-weighted`) — 클래스별 표본 수 역수로 가중치(straight 0.913, taper_smooth 1.082, taper_step 1.11, mug 0.926)를 준 `CrossEntropyLoss`. `--no-freeze-backbone --tta`와 함께 `data/test1_orientation_backup`(126장)로 재학습·평가 | 96.9% | **84.1%, Macro-F1 0.834** (가중치 없는 TTA 버전 82.5%/0.829 대비) | 목표했던 taper_smooth는 F1 0.688→**0.716**로 개선됐지만, mug는 오히려 0.900→0.811로 하락(recall 81.8%→68.2%) — 표본 적은 클래스(taper_step/taper_smooth) 위주로 가중치를 준 결과 상대적으로 표본 많은 mug 비중이 줄어든 트레이드오프. 전체 지표는 순개선(정확도 +1.6%p, Macro-F1 +0.005)이지만 "만능 개선"은 아님. **공식 체크포인트는 아직 안 건드림** — `checkpoints_experiment/resnet18_shape.pth`에 별도 저장, 승격 여부는 미결정 |
 
 ## EfficientNet-B0 (`src/deep_learning/efficientnet/`)
 
@@ -89,6 +90,19 @@
 | 날짜 | 담당자 | 변경 사항 | Val 정확도 | Test 정확도 | 비고 |
 |---|---|---|---|---|---|
 | 2026-09-16 | Claude | `model.py`(SimpleCNN, 채널 32→64→128→256) + `train.py`(dl2_resnet과 동일 패턴, 입력 128x128, RandomPerspective 포함) 최초 구현, 40 epoch 학습 | 66.9%(best epoch 33) | **24.0%(25/104), Macro-F1 0.233** | Val 곡선이 처음부터 끝까지 진동함(예: epoch 28에서 val_acc 0.480→0.339로 급락 후 재상승) — 사전학습 특징 없이 515장만으로 학습하니 일반화가 불안정하다는 신호. **Test에서 완전히 무너짐**: straight recall 7.9%, taper_smooth recall 9.1% — 대부분 mug로 예측(mug recall 100%, precision 12.0%)해서 룰베이스와 비슷한 "애매하면 mug" 붕괴 패턴 재현. **결론**: ResNet-18 unfreeze(Test 79.8%, Macro-F1 0.769)와의 격차(정확도 55.8%p, Macro-F1 0.536)가 이 데이터 규모(train 515장)에서 전이학습이 얼마나 결정적인지 정량적으로 보여줌 — 처음부터 학습한 CNN은 ImageNet에서 배운 저수준 시각 특징(에지·질감·색 대비) 없이는 이 정도 소규모 데이터로 일반화하기 어려움 |
+
+---
+
+## Vision Transformer (`src/deep_learning/vit/`) — 팀원(taehyun) 브랜치 비교용, 4트랙 비교 제외
+
+**4트랙(룰베이스/Mask R-CNN/ResNet/EfficientNet) 공식 비교표에는 넣지 않는다.** 팀원 taehyun님의 `taehyun/ViT` 브랜치(DeiT-Small/16, timm) 로직을 이식해서, 이 프로젝트의 `data/preprocess`(642장)로 재학습·비교한 것. taehyun님 원본 브랜치는 별도 수집한 441장(우리 `data/raw2`와 동일 원본 이미지 pool에서 다르게 추린 것, sha256 대조로 확인)으로 학습했음 — 여기서는 "같은 데이터로 학습했을 때" 비교를 위해 `data/preprocess` 기준으로 재현.
+
+`--baseline`(완전 베이스라인: 증강·종횡비패딩·부분freeze·차등LR·weight decay 전부 제거, 백본 전체를 단일 LR로 학습)과 `--experiment B`(taehyun 설계: 마지막 4블록만 unfreeze+차등LR+weight decay 0.01+종횡비 패딩+증강) 두 버전을 각각 테스트1(`data/preprocess`의 Val, 127장)/테스트2(`data/test1_orientation_backup`, 126장) 기준으로 비교.
+
+| 날짜 | 담당자 | 변경 사항 | 테스트1(Val) | 테스트2 | 비고 |
+|---|---|---|---|---|---|
+| 2026-09-17 | Claude | `model.py`/`transforms.py`/`train.py` 이식(timm `deit_small_patch16_224.fb_in1k`). `--baseline`(완전 베이스라인, 백본 전체 unfreeze+단일LR+증강없음+단순 Resize/CenterCrop) 25 epoch 학습 | **98.4%, Macro-F1 0.984** | **85.7%(108/126), Macro-F1 0.856** | 하락폭 12.7%p. ResNet-18(TTA, 82.5%/0.829)보다도 소폭 높음 — 놀랍게도 "아무 튜닝도 안 한" 버전이 더 잘 나옴 |
+| 2026-09-17 | Claude | 동일 데이터로 taehyun 설계(`--experiment B`: 마지막 4블록+norm+head만 unfreeze, 차등LR 1e-5/1e-4, weight_decay=0.01, 종횡비 보존 패딩, 좌우반전+회전+ColorJitter 증강) 25 epoch 학습, 같은 테스트셋으로 재평가(`--eval-only`) | 99.2%, Macro-F1 0.992 | **73.8%(93/126), Macro-F1 0.729** | 하락폭 25.4%p — **완전 베이스라인보다 오히려 낮음**(테스트2 정확도 -11.9%p, Macro-F1 -0.127). 두 버전 다 테스트1(Val)은 거의 완벽(98~99%)인데 taehyun 설계 쪽이 실사진에서 더 크게 무너짐. 추정 원인: 마지막 4블록만 풀고 나머지 8블록을 ImageNet 가중치로 고정해둔 게, 오히려 우리 도메인(실사진 원근왜곡 등)에 적응할 여지를 줄여서 일반적 직관(부분 고정=과적합 방지)과 반대 결과가 나온 것으로 추정 — 원인 미확정, 추가 검증 필요 |
 
 ---
 

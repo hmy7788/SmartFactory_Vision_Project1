@@ -24,7 +24,7 @@ import os
 import random
 import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 sys.stdout.reconfigure(line_buffering=True, encoding="utf-8")  # 리다이렉트 시 즉시 출력 + cp949 인코딩 에러 방지
 
@@ -255,6 +255,8 @@ def main() -> None:
                          help="재학습 없이 기존 체크포인트를 불러와 val/test만 재평가한다")
     parser.add_argument("--tta", action="store_true",
                          help="Test 평가에 Test-Time Augmentation(스케일 3종 x 좌우반전) 적용 — 재학습 없이 시도해보는 정확도 개선")
+    parser.add_argument("--class-weighted", action="store_true",
+                         help="클래스 빈도 역수로 가중치를 준 CrossEntropyLoss 사용 — 적은 클래스(불균형)에 더 신경 쓰게 함")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -285,7 +287,19 @@ def main() -> None:
                              shuffle=False, num_workers=0)
 
     model = build_model(args.model, args.freeze_backbone).to(device)
-    criterion = nn.CrossEntropyLoss()
+
+    if args.class_weighted:
+        # 클래스별 표본 수 역수로 가중치를 줘서, 적은 클래스(예: mug)나 계속 약한
+        # 클래스(taper_smooth)가 손실에서 묻히지 않게 한다 — 표본 수에 반비례.
+        counts = Counter(label for _, label in train_samples)
+        total = len(train_samples)
+        class_weights = torch.tensor(
+            [total / (len(CLASSES) * counts[i]) for i in range(len(CLASSES))], dtype=torch.float32
+        ).to(device)
+        print("클래스 가중치:", {c: round(w, 3) for c, w in zip(CLASSES, class_weights.cpu().tolist())})
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
+    else:
+        criterion = nn.CrossEntropyLoss()
 
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     ckpt_path = os.path.join(args.checkpoint_dir, f"{args.model}_shape.pth")
