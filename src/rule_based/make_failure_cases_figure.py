@@ -29,22 +29,22 @@ from shape_classifier import classify_shape, get_mask, SHAPE_LABELS_KO  # noqa: 
 
 CASES = [
     {
-        "path": "data/raw2/taper_step/70.jpg",
-        "true_cls": "taper_step",
-        "title": "① 클로즈업 촬영",
-        "desc": "몸통 전체가 프레임에 안 담김(일부만 촬영)\n높이 측정 자체가 왜곡됨\n알고리즘 문제라기보다 촬영 데이터 문제\n(mug로 오분류)",
-    },
-    {
-        "path": "data/test1/straight/KakaoTalk_20260915_154417925_13.jpg",
+        "path": "data/preprocess/straight/148.jpg",
         "true_cls": "straight",
-        "title": "② 복잡한 배경",
-        "desc": "테이블 그림자·받침이 마스크에 같이 잡힘\nh/d 비율이 5.58 -> 1.02로 뭉개짐\n(mug로 오분류)",
+        "title": "① 저대비 배경",
+        "desc": "흰색 물체 + 흰색/연회색 배경\n마스크 전경 비율 2.6%까지 하락\n(명도 대비가 거의 없어 구분 불가, mug로 오분류)",
     },
     {
-        "path": "data/test1/taper_step/KakaoTalk_20260915_154417925_09.jpg",
+        "path": "data/preprocess/taper_step/116.jpg",
         "true_cls": "taper_step",
-        "title": "③ 손잡이 구멍 메움",
-        "desc": "손잡이 그립 구멍이 segmentation\n단계에서 이미 메워짐 -> 폭이 부풀려짐\n(mug로 오분류)",
+        "title": "② 비스듬히 눕혀진 촬영 각도",
+        "desc": "물체가 세로가 아니라 대각선으로 누워 촬영됨\n세로 10구간 분할 전제 자체가 깨짐\n(아래/위 폭비 22.48로 폭주, mug로 오분류)",
+    },
+    {
+        "path": "data/preprocess/taper_smooth/161.jpg",
+        "true_cls": "taper_smooth",
+        "title": "③ 임계값 경계 케이스",
+        "desc": "마스크는 깨끗하지만 연속/단차 경계가 애매\n단차 비율이 임계값(0.29) 근처에서 살짝 넘어감\n(세그멘테이션이 아니라 판정 로직 자체의 한계)",
     },
 ]
 
@@ -59,7 +59,7 @@ def main() -> None:
     parser.add_argument("--out", default="reports/figures/rule_based/failure_cases.png")
     args = parser.parse_args()
 
-    fig, axes = plt.subplots(len(CASES), 2, figsize=(8, 4.5 * len(CASES)))
+    fig, axes = plt.subplots(len(CASES), 2, figsize=(9, 5.0 * len(CASES)), constrained_layout=True)
     fig.suptitle("룰베이스 마스크 파이프라인의 대표적인 실패 사례", fontsize=16, fontweight="bold")
 
     for row, case in enumerate(CASES):
@@ -82,7 +82,6 @@ def main() -> None:
         mark = "O" if pred == case["true_cls"] else "X"
         ax_mask.set_title(f"마스크 -> 판정: {pred_ko} ({mark}, 실제: {true_ko})", fontsize=10)
 
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     fig.savefig(args.out, dpi=150)
     plt.close(fig)
