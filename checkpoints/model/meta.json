@@ -1,8 +1,8 @@
 {
   "library": "torchvision",
-  "arch": "mobilenet_v3_small",
+  "arch": "convnext_tiny",
   "img_size": 224,
-  "resize": "letterbox",
+  "resize": "stretch",
   "mean": [
     0.485,
     0.456,
@@ -19,6 +19,7 @@
     "taper_smooth",
     "taper_step"
   ],
-  "weights": "best.pt",
-  "_note": "ConvNeXt로 바꿀 때: library/arch/img_size/resize를 학습 코드대로 고치고 best.pt 교체. 클래스 순서는 학습 코드의 CLASSES 순서."
+  "weights": "best_convnext_v5.pth",
+  "state_dict_key": null,
+  "_source": "팀원 inference.py 기준: convnext_tiny(weights=None), classifier[2]=Linear(768,4), transforms.Resize((224,224))+Normalize(ImageNet), CLASS_NAMES 순서, raw state_dict 저장"
 }

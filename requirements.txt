@@ -6,4 +6,5 @@ pillow
 pyyaml
 torch
 torchvision
+streamlit-webrtc   # 브라우저 카메라로 실시간 판정. 없으면 이 컴퓨터 카메라로 대체된다
 # timm   # meta.json library=timm 일 때만

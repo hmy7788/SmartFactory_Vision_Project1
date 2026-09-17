@@ -189,16 +189,18 @@ class Pipeline:
                     f"  빠진 키 {len(missing)}개 (예 {list(missing)[:3]})\n"
                     f"  남는 키 {len(unexpected)}개 (예 {list(unexpected)[:3]})")
         model.eval()   # BatchNorm·Dropout 추론 모드. 빼먹으면 점수가 흔들린다
-        self.torch, self.model = torch, model
+        # GPU가 있으면 쓴다 (ConvNeXt-Tiny는 CPU에서 프레임당 100~300ms, GPU면 10ms대). 없으면 CPU.
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.torch, self.model = torch, model.to(self.device)
         self.arch = f"{self.meta['library']}:{self.meta['arch']}"
         self.size = self.meta["img_size"]
 
     def predict(self, image_bgr: np.ndarray) -> dict:
         torch = self.torch
         t0 = time.perf_counter()
-        x = torch.from_numpy(preprocess(image_bgr, self.meta)).unsqueeze(0)
+        x = torch.from_numpy(preprocess(image_bgr, self.meta)).unsqueeze(0).to(self.device)
         with torch.no_grad():
-            prob = self.model(x).softmax(1)[0].numpy()
+            prob = self.model(x).softmax(1)[0].cpu().numpy()
         probs = {c: float(prob[i]) for i, c in enumerate(self.classes)}
         label = max(probs, key=probs.get)
         return {"label": label, "score": probs[label], "probs": probs,
@@ -216,5 +218,5 @@ class Pipeline:
     def info(self) -> dict:
         w = self.dir / self.meta["weights"]
         return {"arch": self.arch, "input": self.size, "resize": self.meta["resize"],
-                "classes": self.classes, "weights": w.name,
+                "classes": self.classes, "weights": w.name, "device": str(self.device),
                 "size_mb": round(w.stat().st_size / 1e6, 1) if w.is_file() else None}
