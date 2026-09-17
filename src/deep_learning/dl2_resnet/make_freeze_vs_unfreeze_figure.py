@@ -1,7 +1,8 @@
-"""ResNet-18 백본 freeze vs unfreeze의 Test 정확도/Macro-F1 비교 막대그래프를 만든다.
+"""ResNet-18 베이스라인(freeze) vs 개선(unfreeze+TTA)의 Test 정확도/Macro-F1 비교 막대그래프를 만든다.
 
 이번 세션에서 실측한 값 — 둘 다 같은 data/test1_orientation_backup(126장)
-기준(freeze는 최초 실험 환경을 재현해서 재측정, unfreeze는 현재 공식 체크포인트).
+기준(베이스라인은 최초 실험 환경을 재현해서 재측정, 개선 쪽은 현재 공식 체크포인트
++ TTA 추론이 함께 적용된 수치).
 
 실행:
     python src/deep_learning/dl2_resnet/make_freeze_vs_unfreeze_figure.py
@@ -22,8 +23,8 @@ plt.rcParams["axes.unicode_minus"] = False
 
 # (라벨, Test 정확도, Macro-F1) — data/test1_orientation_backup(126장) 기준 실측치.
 DATA = [
-    ("Freeze\n(백본 고정)", 0.635, 0.608),
-    ("Unfreeze\n(백본까지 학습)", 0.825, 0.829),
+    ("베이스라인\n(백본 Freeze, FC layer만 학습)", 0.635, 0.608),
+    ("개선\n(백본 Unfreeze+차등 LR, TTA)", 0.825, 0.829),
 ]
 
 
@@ -49,7 +50,7 @@ def main() -> None:
     ax2.set_ylabel("Test Macro-F1")
     ax.set_ylim(0, 100)
     ax2.set_ylim(0, 1.0)
-    ax.set_title("ResNet-18 백본 Freeze vs Unfreeze — Test 성능 비교\n(data/test1_orientation_backup 126장 기준)",
+    ax.set_title("ResNet-18 베이스라인 vs 개선(Unfreeze+TTA) — Test 성능 비교\n(data/test1_orientation_backup 126장 기준)",
                   fontsize=13, fontweight="bold")
 
     for b, v in zip(bars1, acc):
