@@ -24,11 +24,11 @@ from pathlib import Path
 
 # ── 설정 ──────────────────────────────────────────────────────────────────────
 CLASS_NAMES = ['mug', 'straight', 'taper_smooth', 'taper_step']
-CLASS_DISPLAY = {
-    'mug':          'Mug (손잡이형 머그)',
-    'straight':     'Straight (원통형 스트레이트)',
-    'taper_smooth': 'Smooth Taper (완만한 테이퍼형)',
-    'taper_step':   'Step Taper (계단식 테이퍼형)',
+CLASS_DISPLAY = {   # 화면에 보이는 이름 — 대시보드(K-Arch Trip)의 양식 이름과 맞춘다
+    'mug':          'Eave Architecture (처마 확장형 건축)',
+    'straight':     'Straight Architecture (수직 직선형 건축)',
+    'taper_smooth': 'Smooth Taper Architecture (곡선 테이퍼형 건축)',
+    'taper_step':   'Step Taper Architecture (계단식 적층형 건축)',
 }
 IMG_SIZE = 224
 

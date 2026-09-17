@@ -1,18 +1,24 @@
-"""텀블러 형태 → 건축 양식 판정 (보는 사람용 화면).
+"""K-Arch Trip — 사진 한 장으로 만드는 나만의 K-건축 도감.
 
 저장소 루트에서:
     streamlit run app/demo.py
     streamlit run app/demo.py -- --checkpoint checkpoints/model
 
+읽는 것은 '실루엣'이다. 위아래 폭이 같은가, 매끄럽게 좁아지는가, 단이 지는가, 옆으로 뻗은
+것이 있는가 — 텀블러와 건축물이 같은 규칙으로 갈린다. 그래서 텀블러로 학습한 모델이
+한국 건축 형태를 읽는 도감이 된다.
+
 구성
   - 모델은 checkpoints/<폴더>/meta.json + 가중치 하나. 고르는 화면이 없다.
-  - 이력 저장 없음. 지표·로그 없음 — 보는 사람이 알 필요 없는 것.
-  - 사진 한 장 올리는 흐름이 첫 화면. 실시간(카메라)이 두 번째 탭.
+  - 사진 한 장 올리는 흐름이 첫 화면. 실시간(카메라)이 두 번째, 모은 도감이 세 번째 탭.
   - 판정 아래에 그 양식의 해설(src/explanation/class_profiles.yaml).
+  - 도감에는 **실시간 탭에서 직접 찍어 확정된 것만** 담긴다. 올린 사진은 판정·해설까지만 —
+    남의 사진을 받아 주면 '여행하며 모으는 도감'이 아니라 그냥 분류기가 된다.
+  - 도감은 세션 메모리다. 새로고침하면 비워진다 — 시연용이라 파일로 남기지 않는다.
 
 판정 규칙(src/explanation/profiles.decide)은 모델 출력과 다른 층이다 — 확신도에 기준을 걸어
 사후에 정한다. 기준 미만이면 '판정 보류'로 두고 어떤 양식의 해설도 내지 않는다(화면이 자기를
-반박하지 않게).
+반박하지 않게). 도감에도 확정된 것만 들어간다.
 """
 import argparse
 import html as html_lib
@@ -40,9 +46,17 @@ REVIEW_THR = 0.70     # 판정 확신 기준 기본값
 MAX_RECORDS = 5000
 UNSET = "__unset__"   # '이번 실행에서 아직 해설을 안 그렸다' 표시. None은 '보류라서 해설 없음'과 겹친다
 
-TITLE = "텀블러 형태로 읽는 건축 양식"
-SUBTITLE = ("텀블러의 실루엣을 건축물의 형태로 보고, 어떤 양식 계열인지 판정한 뒤 그 양식의 배경을 설명합니다. "
-            "이 프로젝트에서 텀블러는 건축 양식 분류의 대리 도메인입니다.")
+APP_NAME = "K-Arch Trip"
+TITLE = "K-Arch Trip — 나만의 K-건축 도감"        # 브라우저 탭 제목
+TAGLINE = "사진 한 장으로 만드는 나만의 K-건축 도감"
+SUBTITLE = ("건축물의 실루엣을 읽어 어떤 형태 계열인지 판정하고, 그 형태가 왜 그렇게 생겼는지 "
+            "한국 건축의 사례로 설명합니다. 직접 찍어 확정된 것만 도감에 쌓입니다.")
+
+DEX_GOAL = 50         # 도감 목표 칸 수. 시연에서 '몇 개 모았나'를 보여주는 눈금일 뿐이다
+THUMB_W = 160         # 도감 썸네일 가로 픽셀. 세션 메모리에 남으므로 작게 둔다
+
+ACCENT = "#FF4B4B"    # .streamlit/config.toml의 primaryColor와 같은 값
+INK = "#1C1B19"
 
 
 def parse_args() -> argparse.Namespace:
@@ -87,6 +101,31 @@ def on_snap() -> None:
     st.session_state.running = False
 
 
+# ---------------------------------------------------------------- 도감
+# 판정한 사진을 모아 두는 곳. 세션 메모리라 새로고침하면 비워진다 —
+# 시연에서 '모으는 맛'을 보여주는 게 목적이라 파일·DB로 남기지 않는다.
+
+def make_thumb(image: np.ndarray, width: int = THUMB_W) -> np.ndarray:
+    """도감에 넣을 작은 사진. 원본을 그대로 들고 있으면 세션 메모리가 금방 는다."""
+    h, w = image.shape[:2]
+    if w <= width:
+        return image.copy()
+    return cv2.resize(image, (width, max(1, round(h * width / w))), interpolation=cv2.INTER_AREA)
+
+
+def dex_add(image: np.ndarray, key: str) -> None:
+    """확정된 판정 하나를 도감에 넣는다. 확정된 것만 부르는 쪽에서 거른다."""
+    st.session_state.dex.append({
+        "thumb": make_thumb(image),
+        "key": key,
+        "ts": time.strftime("%Y.%m.%d %H:%M"),
+    })
+
+
+def dex_clear() -> None:
+    st.session_state.dex.clear()
+
+
 # ---------------------------------------------------------------- 시작
 args = parse_args()
 st.set_page_config(page_title=TITLE, layout="wide")
@@ -99,7 +138,26 @@ ss.setdefault("cam_index", 0)
 ss.setdefault("judge", None)
 ss.setdefault("captured", None)      # (이미지, 판정) — 실시간 화면에서 캡처한 한 장
 ss.setdefault("snap_request", False)
+ss.setdefault("dex", [])             # 도감 — [{thumb, key, ts}]
 ss.shown_label = UNSET   # 본 실행마다 리셋: 화면이 새로 그려졌으니 해설도 다시 그려야 한다
+
+# 화면 껍데기. Streamlit 내부 클래스는 건드리지 않는다 — 버전이 바뀌면 이름이 바뀌어 조용히 깨진다.
+# 여기서 만든 클래스(ka-*)만 칠한다.
+st.markdown(f"""<style>
+.ka-head {{background:{INK};border-radius:18px;padding:18px 24px;margin:0 0 6px 0;
+           display:flex;align-items:center;gap:16px;flex-wrap:wrap;}}
+.ka-brand {{color:#fff;font-size:1.32rem;font-weight:700;letter-spacing:.3px;}}
+.ka-tag {{color:rgba(255,255,255,.72);font-size:.92rem;flex:1;min-width:180px;}}
+.ka-count {{color:#fff;background:{ACCENT};border-radius:999px;padding:5px 14px;
+            font-size:.86rem;font-weight:700;white-space:nowrap;}}
+.ka-card {{border:1px solid rgba(128,128,128,.28);border-left:4px solid {ACCENT};
+           border-radius:14px;padding:14px 18px;margin:2px 0 12px 0;}}
+.ka-ko {{font-size:1.42rem;font-weight:700;line-height:1.25;}}
+.ka-en {{font-size:.92rem;opacity:.55;margin-top:2px;letter-spacing:.2px;}}
+.ka-chips {{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 2px 0;}}
+.ka-chips span {{border:1px solid rgba(128,128,128,.34);border-radius:999px;
+                 padding:4px 12px;font-size:.82rem;opacity:.85;}}
+</style>""", unsafe_allow_html=True)
 
 CLASS_PROFILES = profiles.load_profiles()
 
@@ -130,8 +188,8 @@ with st.sidebar:
             "- 🟢 **판정 완료** — 확신도가 기준 이상. 양식과 해설이 나옵니다.\n"
             "- 🟡 **판정 보류** — 확신도가 기준 미만. 확실하지 않을 땐 답하지 않고 후보만 보여줍니다.\n"
             "- 🔴 **판정 실패** — 사진을 처리하지 못했습니다.\n"
-            "- 확신도는 '모델이 헷갈리는 정도'입니다. 물체가 너무 작거나 배경이 복잡하면 "
-            "확신하면서 틀릴 수도 있으니, 텀블러가 화면에 크게 나오게 찍어 주세요.")
+            "- 확신도는 '모델이 헷갈리는 정도'입니다. 건물이 너무 작게 나오거나 배경이 복잡하면 "
+            "확신하면서 틀릴 수도 있으니, 건물 전체가 프레임에 차게 찍어 주세요.")
     if not CLASS_PROFILES:
         st.caption(f"해설 파일이 없습니다: {profiles.PROFILE_PATH.name}")
     elif classes:
@@ -140,14 +198,19 @@ with st.sidebar:
             st.caption(f"해설이 없는 양식: {', '.join(_missing)}")
 
 # ---------------------------------------------------------------- 본문
-st.title(TITLE)
+st.markdown(
+    f'<div class="ka-head">'
+    f'<div class="ka-brand">🏛 {html_lib.escape(APP_NAME)}</div>'
+    f'<div class="ka-tag">{html_lib.escape(TAGLINE)}</div>'
+    f'<div class="ka-count">도감 {len(ss.dex)} / {DEX_GOAL}</div>'
+    f'</div>', unsafe_allow_html=True)
 st.caption(SUBTITLE)
 if model_error:
     st.warning(f"판정 모델이 아직 준비되지 않았습니다. `{args.checkpoint}`에 meta.json과 가중치를 넣어 주세요.")
     with st.expander("자세한 원인"):
         st.text(model_error)
 
-tab_photo, tab_live = st.tabs(["사진으로 판정", "실시간 판정"])
+tab_photo, tab_live, tab_dex = st.tabs(["📷 사진으로 찍기", "🎥 실시간으로 찍기", "📖 나의 도감"])
 
 
 BAR_ACCENT = "#FF4B4B"   # 기준을 넘긴 1등에만. .streamlit/config.toml의 primaryColor와 같은 값
@@ -203,7 +266,15 @@ def render_verdict(container, record: dict) -> str | None:
         label, score = pred.get("label"), pred.get("score")
         title, _, state = profiles.decide(CLASS_PROFILES, label, score, review_thr)
         if state == "ok":
-            st.markdown(f"### 🟢 {title}")
+            # 목업의 결과 카드: 우리말 양식명이 크게, 영문명이 부제로, 그 아래 특징 칩.
+            en = profiles.subtitle(CLASS_PROFILES, label)
+            chips = "".join(f"<span>{html_lib.escape(f)}</span>"
+                            for f in profiles.features(CLASS_PROFILES, label))
+            st.markdown(
+                f'<div class="ka-card"><div class="ka-ko">🏛 {html_lib.escape(title)}</div>'
+                + (f'<div class="ka-en">{html_lib.escape(en)}</div>' if en else "")
+                + (f'<div class="ka-chips">{chips}</div>' if chips else "")
+                + '</div>', unsafe_allow_html=True)
             st.success(f"판정 완료 · 확신도 {score:.0%} (기준 {review_thr:.0%})")
         else:
             cands = profiles.top_candidates(pred.get("probs"), profiles=CLASS_PROFILES)
@@ -235,6 +306,21 @@ def render_profile(container, key: str | None) -> None:
                 col.markdown(f"**{profiles.FIELD_LABELS[field]}**  \n{info[field]}")
 
 
+def render_dex_button(container, image: np.ndarray, key: str | None, btn_key: str) -> None:
+    """'도감에 추가하기' — 실시간 탭에서 직접 찍은 한 장에만 나온다.
+
+    두 가지를 건다.
+      - 확정된 판정만: 보류한 것을 모으면 도감이 거짓말을 한다.
+      - 직접 찍은 것만: 올린 사진까지 받으면 '여행하며 모으는 도감'이 아니라 그냥 분류기다.
+        그래서 사진 탭에는 이 버튼을 아예 그리지 않는다(render_capture에서만 부른다).
+    """
+    if key is None:
+        return
+    container.button("＋ 도감에 추가하기", key=btn_key, type="primary", width="stretch",
+                     on_click=dex_add, args=(image, key),
+                     help="지금 찍은 이 장면을 '나의 도감' 탭에 담습니다. 새로고침하면 비워집니다.")
+
+
 def make_record(image: np.ndarray, filename: str) -> dict:
     return {"filename": filename, "t": time.perf_counter(), **pipe.safe_predict(image.copy())}
 
@@ -263,26 +349,28 @@ def render_gradcam(container, image: np.ndarray, record: dict) -> None:
             st.markdown(line)
         st.caption(why["confidence_str"])
         st.caption("이 문장은 '모델이 어디를 봤나'를 옮긴 것이지 정답의 증거가 아닙니다. "
-                   "텀블러가 아니라 배경이나 손이 빨갛다면 맞혔더라도 우연일 수 있습니다.")
+                   "건물이 아니라 하늘이나 사람이 빨갛다면 맞혔더라도 우연일 수 있습니다.")
 
 
-def render_capture(image: np.ndarray, record: dict, title: str = "📸 캡처 판정") -> None:
-    """캡처한 한 장: 사진 · 근거 히트맵 · 판정 · 해설."""
+def render_capture(image: np.ndarray, record: dict, title: str = "📸 캡처한 한 장") -> None:
+    """캡처한 한 장: 사진 · 근거 히트맵 · 판정 · 해설 · 도감 담기."""
     st.markdown(f"#### {title}")
     left, right = st.columns([1, 1], gap="large")
     left.image(image, channels="BGR", width="stretch")
     key = render_verdict(right, record)
+    render_dex_button(right, image, key, "dex_capture")
     render_gradcam(left, image, record)
     render_profile(st, key)
 
 
 # ---------------------------------------------------------------- 탭 1: 사진 한 장
 with tab_photo:
-    up = st.file_uploader("텀블러 사진을 올려 주세요 (jpg · png · bmp)", type=["jpg", "jpeg", "png", "bmp"],
-                          key="upload")
+    up = st.file_uploader("건축물 사진을 올려 주세요 (jpg · png · bmp)",
+                          type=["jpg", "jpeg", "png", "bmp"], key="upload",
+                          help="형태 판정과 해설만 보여 줍니다. 도감에 담으려면 실시간 탭에서 직접 찍어야 합니다.")
     photo_slot = st.empty()
     if up is None:
-        photo_slot.info("사진을 올리면 이 자리에 판정과 해설이 나옵니다.")
+        photo_slot.info("사진을 올리면 이 자리에 형태 판정과 해설이 나옵니다.")
     elif pipe is None:
         photo_slot.warning("판정 모델이 준비되지 않아 판정할 수 없습니다.")
     else:
@@ -295,6 +383,9 @@ with tab_photo:
                 left, right = st.columns([1, 1], gap="large")
                 left.image(image, channels="BGR", width="stretch")
                 key = render_verdict(right, record)
+                if key is not None:
+                    # 버튼 대신 안내. 도감은 '직접 찍은 것'만 받는다 — 버튼을 찾을 자리에 이유를 둔다.
+                    right.caption("🎥 도감에는 직접 찍은 것만 담깁니다 — **실시간으로 찍기** 탭에서 촬영해 주세요.")
                 render_gradcam(left, image, record)
                 render_profile(st, key)
 
@@ -309,8 +400,9 @@ with tab_live:
     if pipe is None:
         st.warning("판정 모델이 준비되지 않아 실시간 판정을 할 수 없습니다.")
     else:
-        st.caption("이 컴퓨터에 연결된 카메라로 판정합니다. 영상은 카메라 속도대로 흐르고, "
-                   f"판정은 {judge_interval:.1f}초에 한 번씩 갱신됩니다.")
+        st.caption("이 컴퓨터에 연결된 카메라로 건축물을 비춰 보세요. 영상은 카메라 속도대로 흐르고, "
+                   f"판정은 {judge_interval:.1f}초에 한 번씩 갱신됩니다. "
+                   "마음에 드는 장면에서 캡처하면 도감에 담을 수 있습니다.")
         ss.cam_index = find_camera()
         if ss.cam_index is None:
             st.warning("카메라를 찾지 못했습니다. 다른 앱(줌·팀즈 등)이 쓰고 있으면 먼저 닫아 주세요. "
@@ -322,7 +414,7 @@ with tab_live:
         b1.button("시작", key="start", type="primary", on_click=on_start,
                   disabled=ss.running or ss.cam_index is None, width="stretch")
         b2.button("정지", key="stop", on_click=on_stop, disabled=not ss.running, width="stretch")
-        b3.button("📸 캡처해서 판정", key="snaplocal", on_click=on_snap,
+        b3.button("📸 찍어서 판정", key="snaplocal", on_click=on_snap,
                   disabled=not ss.running, width="stretch",
                   help="영상을 멈추고 그 순간의 한 장을 판정합니다 (근거 히트맵 포함).")
         main_col, side_col = st.columns([3, 2], gap="large")
@@ -330,6 +422,50 @@ with tab_live:
         verdict_slot = side_col.empty()
         summary_slot = side_col.empty()
         profile_slot = st.empty()
+
+# ---------------------------------------------------------------- 탭 3: 나의 도감
+with tab_dex:
+    dex = list(ss.dex)
+    st.markdown(f"### 📖 나의 K-건축 도감 &nbsp; {len(dex)} / {DEX_GOAL}")
+    st.progress(min(1.0, len(dex) / DEX_GOAL) if DEX_GOAL else 0.0)
+    if not dex:
+        st.info("아직 모은 건축이 없습니다. **🎥 실시간으로 찍기** 탭에서 촬영하고 "
+                "**＋ 도감에 추가하기**를 눌러 보세요. 도감에는 직접 찍은 것만 담깁니다.")
+    else:
+        # 양식별 현황 = 그대로 필터. 0인 칩도 남겨 둔다 — 못 모은 게 '다음에 뭘 찍을까'가 된다.
+        counts = Counter(d["key"] for d in dex)
+        order = classes or list(CLASS_PROFILES)
+        labels = {f"{profiles.headline(CLASS_PROFILES, c)} {counts.get(c, 0)}": c for c in order}
+        # 칩 이름에 개수가 들어 있어서, 한 장 더 담으면 그 칩의 이름 자체가 바뀐다.
+        # 고른 값이 목록에서 사라진 채로 두면 Streamlit이 놀라므로 먼저 전체로 되돌린다
+        # (= 방금 담은 양식을 보고 있었다면 전체로 풀린다. 담자마자 전체를 보는 게 자연스럽다).
+        if ss.get("dexfilter") not in labels:
+            ss["dexfilter"] = None
+        picked_label = st.pills("양식으로 거르기", list(labels), key="dexfilter",
+                                label_visibility="collapsed",
+                                help="누르면 그 양식만 봅니다. 한 번 더 누르면 전체로 돌아옵니다.")
+        picked = labels.get(picked_label)                  # 아무것도 안 고르면 None = 전체
+        shown = [d for d in dex if picked is None or d["key"] == picked]
+
+        if picked is None:
+            st.caption(f"전체 {len(dex)}장 — 칩을 누르면 그 양식만 봅니다.")
+        elif shown:
+            st.caption(f"**{profiles.headline(CLASS_PROFILES, picked)}** {len(shown)}장 "
+                       f"(전체 {len(dex)}장) — 칩을 한 번 더 누르면 전체로 돌아옵니다.")
+        else:
+            st.info(f"**{profiles.headline(CLASS_PROFILES, picked)}**은 아직 모으지 못했습니다. "
+                    "실시간 탭에서 찾아서 찍어 보세요.")
+
+        if shown:
+            cols = st.columns(6)
+            for i, item in enumerate(reversed(shown)):     # 최근에 담은 것이 앞
+                col = cols[i % 6]
+                col.image(item["thumb"], channels="BGR", width="stretch")
+                col.caption(f"{profiles.headline(CLASS_PROFILES, item['key'])}  \n{item['ts']}")
+        st.write("")
+        st.button("도감 비우기", key="dexclear", on_click=dex_clear,
+                  help="담아 둔 사진을 모두 지웁니다. 되돌릴 수 없습니다.")
+    st.caption("도감은 이 세션에만 남습니다 — 새로고침하거나 브라우저를 닫으면 비워집니다.")
 
 
 def show_summary() -> None:
@@ -348,12 +484,12 @@ def show_summary() -> None:
                 counts[pred["label"]] += 1
             else:
                 held += 1
-        parts = [f"{profiles.headline(CLASS_PROFILES, c)} {n}장" for c, n in counts.most_common()]
+        parts = [f"{profiles.headline(CLASS_PROFILES, c)} {n}컷" for c, n in counts.most_common()]
         if held:
-            parts.append(f"보류 {held}장")
+            parts.append(f"보류 {held}컷")
         if failed:
-            parts.append(f"실패 {failed}장")
-        st.caption(f"지금까지 {len(records)}장 · " + " · ".join(parts))
+            parts.append(f"실패 {failed}컷")
+        st.caption(f"이번 촬영에서 {len(records)}컷 판정 · " + " · ".join(parts))
 
 
 def show_live(record: dict | None) -> None:
@@ -399,7 +535,7 @@ if pipe is not None:
             frozen = ss.last_image.copy()
             ss.captured = (frozen, make_record(frozen, "capture"))
     if ss.last_image is None:
-        image_slot.info("시작을 누르면 여기에 화면과 판정이 나옵니다.")
+        image_slot.info("시작을 누르면 여기에 카메라 화면과 형태 판정이 나옵니다.")
     else:
         image_slot.image(ss.last_image, channels="BGR", width="stretch")
         show_live(ss.records[-1] if ss.records else None)

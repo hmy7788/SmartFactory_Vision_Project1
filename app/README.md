@@ -1,4 +1,4 @@
-# 대시보드 — 어디를 고치면 되나
+# K-Arch Trip 대시보드 — 어디를 고치면 되나
 
 실행: 저장소 루트에서 `app\run_demo.bat` (윈도우) 또는 `streamlit run app/demo.py`
 
@@ -11,10 +11,15 @@
 | 근거 히트맵이 **화면에 놓이는 방식** (문구·위치) | `app/demo.py` | `render_gradcam()` |
 | 근거 히트맵 **계산**(히트맵 색·투명도·어느 층을 볼지) | `src/gradcam.py` | `overlay_cam()` · `target_layer()` |
 | **판정 근거 문장** (📍 어디를 봤나, 확신도 설명) | `src/gradcam_reason.py` | `_reason_<클래스>()` · `_confidence_tier()` |
-| 양식 해설 **문구** (디자인 특징·사조·대표 제품) | `src/explanation/class_profiles.yaml` | 클래스 이름으로 찾기 |
-| 해설 **항목 이름**("디자인 특징" 같은 제목) | `src/explanation/profiles.py` | `FIELD_LABELS` |
+| 양식 해설 **문구** (구조적 이유·사조·대표 건축물) | `src/explanation/class_profiles.yaml` | 클래스 이름으로 찾기 |
+| 결과 카드의 **주요 특징 칩** | `src/explanation/class_profiles.yaml` | 각 클래스의 `features:` |
+| 해설 **항목 이름**("대표 건축물" 같은 제목) | `src/explanation/profiles.py` | `FIELD_LABELS` |
+| 양식 **이름**(우리말/영문) | `src/explanation/class_profiles.yaml` | `ko:` / `title:` |
 | 판정/보류를 가르는 **규칙** | `src/explanation/profiles.py` | `decide()` |
-| 제목·소개 문장 | `app/demo.py` | `TITLE` · `SUBTITLE` |
+| 앱 이름·태그라인·소개 문장 | `app/demo.py` | `APP_NAME` · `TAGLINE` · `SUBTITLE` |
+| 화면 껍데기 (헤더 바·결과 카드·칩 모양) | `app/demo.py` | `st.markdown("""<style>` 블록의 `.ka-*` |
+| **도감** (목표 칸 수·썸네일 크기·담는 규칙) | `app/demo.py` | `DEX_GOAL` · `THUMB_W` · `dex_add()` · `render_dex_button()` |
+| 도감 화면 · 양식 칩 **필터** | `app/demo.py` | `with tab_dex:` · `st.pills(..., key="dexfilter")` |
 | 사이드바 (기준 슬라이더·판정 간격·히트맵 켜기) | `app/demo.py` | `# ---- 사이드바` 블록 |
 | 카메라 해상도 | `src/sources.py` | `CAPTURE_SIZE` |
 | 탭 이름, 탭 구성 | `app/demo.py` | `st.tabs([...])` |
