@@ -1,0 +1,12 @@
+{
+  "library": "torchvision",
+  "arch": "convnext_tiny",
+  "img_size": 224,
+  "resize": "stretch",
+  "mean": [0.485, 0.456, 0.406],
+  "std":  [0.229, 0.224, 0.225],
+  "classes": ["mug", "straight", "taper_smooth", "taper_step"],
+  "weights": "best_convnext_v5.pth",
+  "state_dict_key": null,
+  "_note": "ConvNeXt-Tiny v5 최종 모델. resize=stretch: 학습 시 transforms.Resize((224,224)) 사용."
+}

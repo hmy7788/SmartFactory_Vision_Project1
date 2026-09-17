@@ -1,0 +1,13 @@
+# 가중치 파일 — 용량 크고 git에 올리면 안 됨
+*.pth
+*.pt
+*.ckpt
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo
+
+# 기타
+.DS_Store
+Thumbs.db
