@@ -1,0 +1,9 @@
+# python -m pip install -r requirements.txt   (Python 3.10+)
+streamlit
+opencv-python
+numpy
+pillow
+pyyaml
+torch
+torchvision
+# timm   # meta.json library=timm 일 때만

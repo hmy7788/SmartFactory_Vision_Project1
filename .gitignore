@@ -1,0 +1,17 @@
+# 가중치·데이터·산출물은 git에 올리지 않는다 (크고 바이너리). 코드·설정·설명만 올린다.
+checkpoints/**/*.pt
+checkpoints/**/*.pth
+checkpoints/**/*.joblib
+checkpoints/**/*.onnx
+data/
+!data/.gitkeep
+reports/figures/*.png
+__pycache__/
+*.pyc
+.venv/
+.idea/
+.vscode/
+.ipynb_checkpoints/
+*.db
+.DS_Store
+Thumbs.db

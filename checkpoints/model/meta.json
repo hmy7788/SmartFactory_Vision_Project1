@@ -1,0 +1,24 @@
+{
+  "library": "torchvision",
+  "arch": "mobilenet_v3_small",
+  "img_size": 224,
+  "resize": "letterbox",
+  "mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "classes": [
+    "mug",
+    "straight",
+    "taper_smooth",
+    "taper_step"
+  ],
+  "weights": "best.pt",
+  "_note": "ConvNeXt로 바꿀 때: library/arch/img_size/resize를 학습 코드대로 고치고 best.pt 교체. 클래스 순서는 학습 코드의 CLASSES 순서."
+}
