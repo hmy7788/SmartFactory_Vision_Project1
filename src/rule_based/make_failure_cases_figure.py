@@ -29,10 +29,10 @@ from shape_classifier import classify_shape, get_mask, SHAPE_LABELS_KO  # noqa: 
 
 CASES = [
     {
-        "path": "data/preprocess/straight/165.jpg",
-        "true_cls": "straight",
-        "title": "① 그림자 간섭",
-        "desc": "뚜껑이 벽지에 드리운 진한 대각선 그림자가\n전경으로 같이 잡혀 마스크 전경 비율 90%까지 폭증\n(물체 경계를 못 찾음, mug로 오분류)",
+        "path": "data/preprocess/taper_step/132.jpg",
+        "true_cls": "taper_step",
+        "title": "① 그림자 세그멘테이션",
+        "desc": "바닥에 번진 반사/그림자가 물체 아래쪽에\n넓은 얼룩으로 붙어서 함께 마스크에 잡힘\n(아래폭이 부풀려져 straight로 오분류)",
     },
     {
         "path": "data/preprocess/taper_smooth/143.jpg",
