@@ -1,4 +1,4 @@
-"""ViT(DeiT-Small) 완전 베이스라인 vs 개선점 적용(taehyun 설계)의 Test2 성능 비교 막대그래프를 만든다.
+"""ViT(DeiT-Small) 베이스라인(taehyun 설계) vs 개선점 적용(기법 제거)의 Test2 성능 비교 막대그래프를 만든다.
 
 둘 다 data/test1_orientation_backup(126장) 기준 실측치.
 
@@ -20,9 +20,11 @@ plt.rcParams["font.family"] = "Malgun Gothic"
 plt.rcParams["axes.unicode_minus"] = False
 
 # (라벨, Test2 정확도, Test2 Macro-F1) — data/test1_orientation_backup(126장) 기준 실측치.
+# "베이스라인" = taehyun 설계(패딩+증강+부분freeze+차등LR+WD, 우리가 이어받은 시작점)
+# "개선점 적용" = 그 기법들을 걷어낸 버전(전체 unfreeze+단일LR+증강 없음) — 실측상 오히려 이쪽이 더 높게 나옴
 DATA = [
-    ("완전 베이스라인\n(패딩/증강/부분freeze/차등LR 없음)", 0.857, 0.856),
-    ("개선점 적용\n(패딩+증강+부분freeze+차등LR+WD)", 0.738, 0.729),
+    ("베이스라인(taehyun 설계)\n(패딩+증강+부분freeze+차등LR+WD)", 0.738, 0.729),
+    ("개선점 적용\n(패딩/증강/부분freeze/차등LR 제거)", 0.857, 0.856),
 ]
 
 
@@ -60,9 +62,9 @@ def main() -> None:
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax.legend(lines1 + lines2, labels1 + labels2, loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=2, fontsize=9)
 
-    ax.text(0.5, 0.97, "※ 개선점 적용이 오히려 하락 — 부분 freeze가 도메인 적응을 제한한 것으로 추정",
-            transform=ax.transAxes, ha="center", va="top", fontsize=9, color="#B00020",
-            bbox=dict(boxstyle="round", fc="#FDECEA", ec="#B00020"))
+    ax.text(0.5, 0.97, "※ 기법을 걷어낸 쪽이 오히려 더 높음 — 부분 freeze가 도메인 적응을 제한한 것으로 추정",
+            transform=ax.transAxes, ha="center", va="top", fontsize=9, color="#1B5E20",
+            bbox=dict(boxstyle="round", fc="#E8F5E9", ec="#1B5E20"))
 
     plt.tight_layout()
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
