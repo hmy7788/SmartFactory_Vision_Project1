@@ -15,3 +15,7 @@ __pycache__/
 *.db
 .DS_Store
 Thumbs.db
+
+# 도구 실행파일은 안 올린다. 각자 get_cloudflared.bat으로 받는다 (55MB).
+tools/cloudflared.exe
+*.exe
