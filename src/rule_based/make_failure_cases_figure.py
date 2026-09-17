@@ -29,22 +29,16 @@ from shape_classifier import classify_shape, get_mask, SHAPE_LABELS_KO  # noqa: 
 
 CASES = [
     {
-        "path": "data/preprocess/straight/148.jpg",
-        "true_cls": "straight",
-        "title": "① 저대비 배경",
-        "desc": "흰색 물체 + 흰색/연회색 배경\n마스크 전경 비율 2.6%까지 하락\n(명도 대비가 거의 없어 구분 불가, mug로 오분류)",
-    },
-    {
-        "path": "data/preprocess/taper_step/116.jpg",
+        "path": "data/preprocess/taper_step/63.jpg",
         "true_cls": "taper_step",
-        "title": "② 비스듬히 눕혀진 촬영 각도",
-        "desc": "물체가 세로가 아니라 대각선으로 누워 촬영됨\n세로 10구간 분할 전제 자체가 깨짐\n(아래/위 폭비 22.48로 폭주, mug로 오분류)",
+        "title": "① 그림자·전경 소품 간섭",
+        "desc": "하단의 책 소품, 상단의 얼음/과일 장식이\n전경으로 같이 잡혀 마스크 전경 비율 90%까지 폭증\n(물체 경계를 못 찾음, mug로 오분류)",
     },
     {
-        "path": "data/preprocess/taper_smooth/161.jpg",
+        "path": "data/preprocess/taper_smooth/143.jpg",
         "true_cls": "taper_smooth",
-        "title": "③ 임계값 경계 케이스",
-        "desc": "마스크는 깨끗하지만 연속/단차 경계가 애매\n단차 비율이 임계값(0.29) 근처에서 살짝 넘어감\n(세그멘테이션이 아니라 판정 로직 자체의 한계)",
+        "title": "② 배경-객체 색상 유사",
+        "desc": "흰색 물체 + 흰색/연회색 배경\n색상 차이가 거의 없어 마스크 전경 비율 4.2%로 하락\n(경계를 거의 못 잡음, mug로 오분류)",
     },
 ]
 
