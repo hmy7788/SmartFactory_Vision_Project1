@@ -15,3 +15,5 @@ data/**/*.png
 checkpoints/*.pth
 checkpoints/*.pt
 !checkpoints/.gitkeep
+checkpoints_experiment/*.pth
+checkpoints_experiment/*.pt
