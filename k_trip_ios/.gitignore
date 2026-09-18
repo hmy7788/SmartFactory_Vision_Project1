@@ -1,0 +1,7 @@
+.packages/
+.venv/
+__pycache__/
+*.pyc
+*.log
+*.pt
+*.pth

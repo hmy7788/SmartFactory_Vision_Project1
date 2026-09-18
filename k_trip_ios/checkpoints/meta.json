@@ -1,0 +1,25 @@
+{
+  "library": "torchvision",
+  "arch": "convnext_tiny",
+  "img_size": 224,
+  "resize": "stretch",
+  "mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "classes": [
+    "mug",
+    "straight",
+    "taper_smooth",
+    "taper_step"
+  ],
+  "weights": "best_convnext_v5.pth",
+  "state_dict_key": null,
+  "_source": "팀원 inference.py 기준: convnext_tiny(weights=None), classifier[2]=Linear(768,4), transforms.Resize((224,224))+Normalize(ImageNet), CLASS_NAMES 순서, raw state_dict 저장"
+}
