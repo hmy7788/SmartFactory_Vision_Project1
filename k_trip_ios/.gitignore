@@ -5,3 +5,8 @@ __pycache__/
 *.log
 *.pt
 *.pth
+logs/
+tools/cloudflared.exe
+tools/*.download
+share_qr.png
+share_link.txt
